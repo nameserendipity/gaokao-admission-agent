@@ -1,0 +1,438 @@
+﻿
+import type {
+  AdmissionRecord,
+  CareerGoal,
+  Major,
+  Province,
+  Recommendation,
+  Region,
+  Report,
+  SubjectCategory,
+  University,
+  UserProfile,
+} from '@/lib/types';
+import { getAdmissionsForProfile } from '@/lib/knowledge/admission-source';
+import { searchTeacherKnowledge } from '@/lib/knowledge/teacher-knowledge';
+import { generateDeepSeekSummary } from './deepseek';
+
+const C = {
+  sprint: '\u51b2\u523a',
+  stable: '\u7a33\u59a5',
+  guarantee: '\u4fdd\u5e95',
+  engineering: '\u5de5\u5b66',
+  science: '\u7406\u5b66',
+  medicine: '\u533b\u5b66',
+  literature: '\u6587\u5b66',
+  law: '\u6cd5\u5b66',
+  management: '\u7ba1\u7406\u5b66',
+  economics: '\u7ecf\u6d4e\u5b66',
+  education: '\u6559\u80b2\u5b66',
+  agriculture: '\u519c\u5b66',
+  zhejiang: '\u6d59\u6c5f',
+  shandong: '\u5c71\u4e1c',
+} as const;
+
+const TOTAL_STUDENTS: Record<Province, number> = { zhejiang: 260000, shandong: 350000 };
+const PROVINCE_LABEL: Record<Province, string> = { zhejiang: C.zhejiang, shandong: C.shandong };
+
+type RecommendationType = string;
+
+export function validateUserProfile(input: unknown): UserProfile {
+  if (!input || typeof input !== 'object') throw new Error('Request body is required.');
+  const raw = input as Partial<UserProfile>;
+  if (raw.province !== 'zhejiang' && raw.province !== 'shandong') throw new Error('Only Zhejiang and Shandong are supported in MVP.');
+  if (typeof raw.score !== 'number' || raw.score <= 0 || raw.score > 750) throw new Error('Score must be between 1 and 750.');
+  if (raw.rank !== null && raw.rank !== undefined && (typeof raw.rank !== 'number' || raw.rank <= 0)) throw new Error('Rank must be a positive number.');
+  if (!isSubjectCategory(raw.subjectCategory)) throw new Error('Invalid subject category.');
+  if (!isCareerGoal(raw.careerGoal)) throw new Error('Invalid career goal.');
+
+  return {
+    province: raw.province,
+    score: Math.round(raw.score),
+    rank: raw.rank ? Math.round(raw.rank) : null,
+    subjectCategory: raw.subjectCategory,
+    preferredMajors: Array.isArray(raw.preferredMajors) ? raw.preferredMajors.filter(isNonEmptyString) : [],
+    excludedMajors: Array.isArray(raw.excludedMajors) ? raw.excludedMajors.filter(isNonEmptyString) : [],
+    preferredRegions: Array.isArray(raw.preferredRegions) ? raw.preferredRegions.filter(isRegion) : [],
+    familyBackground: raw.familyBackground === 'well_off' || raw.familyBackground === 'difficult' ? raw.familyBackground : 'ordinary',
+    careerGoal: raw.careerGoal,
+    createdAt: raw.createdAt ? new Date(raw.createdAt) : new Date(),
+  };
+}
+
+export async function generateServerReport(userProfile: UserProfile): Promise<Report> {
+  const rank = userProfile.rank || estimateRankFromScore(userProfile);
+  const rankEstimated = !userProfile.rank;
+  const sourceResult = await getAdmissionsForProfile({
+    province: userProfile.province,
+    score: userProfile.score,
+    rank,
+    subjectCategory: userProfile.subjectCategory,
+    preferredMajors: userProfile.preferredMajors,
+    excludedMajors: userProfile.excludedMajors,
+    limit: 220,
+  });
+  const admissions = sourceResult.records;
+  if (admissions.length === 0) throw new Error('没有可用录取数据，请补充本地知识库或配置 Tavily。');
+  const rankPercentile = (rank / TOTAL_STUDENTS[userProfile.province]) * 100;
+  const suitableMajors = determineSuitableMajors(userProfile);
+  const matchedAdmissions = filterAdmissions(admissions, userProfile, suitableMajors);
+  const recommendations = await generateRecommendations(matchedAdmissions, userProfile, rank);
+  const riskWarnings = [...sourceResult.warnings, ...generateRiskWarnings(userProfile, recommendations, rankEstimated)];
+  const teacherKnowledge = searchTeacherKnowledge(userProfile, riskWarnings);
+  const strategyInsights = buildStrategyInsights(teacherKnowledge.items);
+  const riskDiagnosis = buildRiskDiagnosis(userProfile, recommendations, riskWarnings, rankEstimated);
+  const dataSources = collectDataSources(matchedAdmissions.length > 0 ? matchedAdmissions : admissions);
+
+  const report: Report = {
+    id: `report-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    userProfile,
+    generatedAt: new Date(),
+    positionAnalysis: {
+      province: userProfile.province,
+      score: userProfile.score,
+      rank,
+      rankEstimated,
+      rankPercentile,
+      positionDescription: generatePositionDescription(rankPercentile, userProfile.province, rankEstimated),
+    },
+    suitableMajors,
+    recommendations,
+    strategyInsights,
+    riskDiagnosis,
+    riskWarnings,
+    dataSources,
+    disclaimer: '\u672c\u62a5\u544a\u4ec5\u4f9b\u53c2\u8003\uff0c\u4e0d\u6784\u6210\u5f55\u53d6\u627f\u8bfa\u6216\u4fdd\u8bc1\u3002\u6700\u7ec8\u4ee5\u5404\u7701\u6559\u80b2\u8003\u8bd5\u9662\u53ca\u9ad8\u6821\u5b98\u65b9\u53d1\u5e03\u4e3a\u51c6\u3002',
+  };
+  report.aiSummary = await generateDeepSeekSummary(report);
+  return report;
+}
+
+function isSubjectCategory(value: unknown): value is SubjectCategory {
+  return ['physics_chemistry', 'history_politics', 'physics_history', 'chemistry_biology', 'other'].includes(String(value));
+}
+function isCareerGoal(value: unknown): value is CareerGoal {
+  return ['employment', 'postgraduate', 'stable', 'flexible'].includes(String(value));
+}
+function isRegion(value: unknown): value is Region {
+  return ['east', 'south', 'north', 'west', 'central', 'northeast'].includes(String(value));
+}
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function estimateRankFromScore(userProfile: UserProfile): number {
+  const scoreRatio = userProfile.score / 750;
+  const totalStudents = TOTAL_STUDENTS[userProfile.province];
+  if (userProfile.province === 'zhejiang') {
+    if (scoreRatio > 0.9) return Math.max(1, Math.round(totalStudents * (1 - scoreRatio) * 0.3));
+    if (scoreRatio > 0.8) return Math.max(1, Math.round(totalStudents * (1 - scoreRatio) * 0.5));
+    return Math.max(1, Math.round(totalStudents * (1 - scoreRatio) * 0.8));
+  }
+  if (scoreRatio > 0.85) return Math.max(1, Math.round(totalStudents * (1 - scoreRatio) * 0.4));
+  if (scoreRatio > 0.75) return Math.max(1, Math.round(totalStudents * (1 - scoreRatio) * 0.6));
+  return Math.max(1, Math.round(totalStudents * (1 - scoreRatio) * 0.9));
+}
+
+function determineSuitableMajors(userProfile: UserProfile): Report['suitableMajors'] {
+  const recommendedCategories = [...new Set([...getMajorCategoriesBySubject(userProfile.subjectCategory), ...getMajorCategoriesByCareerGoal(userProfile.careerGoal)])];
+  const excludedCategories = userProfile.excludedMajors.map(getMajorCategory);
+  return recommendedCategories
+    .filter(category => !excludedCategories.includes(category))
+    .map(category => ({ category, majors: getMajorsByCategory(category, userProfile.preferredMajors), reasons: generateCategoryReasons(category, userProfile) }))
+    .filter(item => item.majors.length > 0);
+}
+
+function getMajorCategoriesBySubject(subject: SubjectCategory): string[] {
+  const categories: Record<SubjectCategory, string[]> = {
+    physics_chemistry: [C.engineering, C.science, C.medicine],
+    history_politics: [C.literature, C.law, C.management, C.economics],
+    physics_history: [C.engineering, C.science, C.literature, C.economics],
+    chemistry_biology: [C.medicine, C.engineering, C.agriculture, C.science],
+    other: [C.engineering, C.science, C.literature, C.management, C.economics],
+  };
+  return categories[subject] || [];
+}
+
+function getMajorCategoriesByCareerGoal(goal: CareerGoal): string[] {
+  const categories: Record<CareerGoal, string[]> = {
+    employment: [C.engineering, C.management, C.economics],
+    postgraduate: [C.science, C.medicine, C.engineering],
+    stable: [C.law, C.education, C.medicine],
+    flexible: [C.engineering, C.science, C.management, C.literature],
+  };
+  return categories[goal] || [];
+}
+
+function getMajorCategory(majorName: string): string {
+  const categoryMap: [string, string][] = [
+    ['\u8ba1\u7b97\u673a', C.engineering], ['\u8f6f\u4ef6', C.engineering], ['\u4eba\u5de5\u667a\u80fd', C.engineering], ['\u7535\u6c14', C.engineering], ['\u7535\u5b50', C.engineering], ['\u673a\u68b0', C.engineering], ['\u571f\u6728', C.engineering], ['\u6750\u6599', C.engineering],
+    ['\u533b\u5b66', C.medicine], ['\u4e34\u5e8a', C.medicine], ['\u53e3\u8154', C.medicine],
+    ['\u5e08\u8303', C.education], ['\u6559\u80b2', C.education],
+    ['\u6587\u5b66', C.literature], ['\u6c49\u8bed\u8a00', C.literature], ['\u82f1\u8bed', C.literature], ['\u65b0\u95fb', C.literature],
+    ['\u6cd5\u5b66', C.law], ['\u7ecf\u6d4e', C.economics], ['\u91d1\u878d', C.economics],
+    ['\u7ba1\u7406', C.management], ['\u4f1a\u8ba1', C.management], ['\u8d22\u52a1', C.management],
+    ['\u6570\u5b66', C.science], ['\u7269\u7406', C.science], ['\u5316\u5b66', C.science], ['\u5fc3\u7406', C.science], ['\u6d77\u6d0b', C.science],
+  ];
+  return categoryMap.find(([key]) => majorName.includes(key))?.[1] || C.engineering;
+}
+
+function getMajorsByCategory(category: string, preferredMajors: string[]): string[] {
+  const preferredInCategory = preferredMajors.filter(major => getMajorCategory(major) === category);
+  if (preferredInCategory.length > 0) return preferredInCategory;
+  const popularMajors = new Map<string, string[]>([
+    [C.engineering, ['\u8ba1\u7b97\u673a\u79d1\u5b66\u4e0e\u6280\u672f', '\u8f6f\u4ef6\u5de5\u7a0b', '\u4eba\u5de5\u667a\u80fd', '\u7535\u5b50\u4fe1\u606f\u5de5\u7a0b']],
+    [C.science, ['\u6570\u5b66\u4e0e\u5e94\u7528\u6570\u5b66', '\u7269\u7406\u5b66', '\u5316\u5b66', '\u751f\u7269\u79d1\u5b66']],
+    [C.medicine, ['\u4e34\u5e8a\u533b\u5b66', '\u53e3\u8154\u533b\u5b66', '\u9884\u9632\u533b\u5b66', '\u836f\u5b66']],
+    [C.literature, ['\u6c49\u8bed\u8a00\u6587\u5b66', '\u82f1\u8bed', '\u65b0\u95fb\u4f20\u64ad\u5b66']],
+    [C.law, ['\u6cd5\u5b66', '\u77e5\u8bc6\u4ea7\u6743']],
+    [C.education, ['\u6570\u5b66\u4e0e\u5e94\u7528\u6570\u5b66(\u5e08\u8303)', '\u6c49\u8bed\u8a00\u6587\u5b66(\u5e08\u8303)', '\u82f1\u8bed(\u5e08\u8303)']],
+    [C.management, ['\u5de5\u5546\u7ba1\u7406', '\u4f1a\u8ba1\u5b66', '\u8d22\u52a1\u7ba1\u7406']],
+    [C.economics, ['\u7ecf\u6d4e\u5b66', '\u91d1\u878d\u5b66', '\u56fd\u9645\u7ecf\u6d4e\u4e0e\u8d38\u6613']],
+    [C.agriculture, ['\u519c\u5b66', '\u56ed\u827a', '\u52a8\u7269\u533b\u5b66']],
+  ]);
+  return popularMajors.get(category) || [];
+}
+
+function generateCategoryReasons(category: string, userProfile: UserProfile): string[] {
+  const reasons = [`\u60a8\u7684\u9009\u79d1\u7ec4\u5408\u53ef\u4f18\u5148\u5173\u6ce8${category}\u7c7b\u4e13\u4e1a`];
+  if (userProfile.careerGoal === 'employment' && [C.engineering, C.management, C.economics].includes(category as typeof C.engineering)) reasons.push(`${category}\u7c7b\u4e13\u4e1a\u66f4\u8d34\u8fd1\u5c31\u4e1a\u4f18\u5148\u8bc9\u6c42`);
+  if (userProfile.careerGoal === 'postgraduate' && [C.science, C.medicine, C.engineering].includes(category as typeof C.science)) reasons.push(`${category}\u7c7b\u4e13\u4e1a\u9002\u5408\u7ee7\u7eed\u6df1\u9020\u8def\u5f84`);
+  if (userProfile.careerGoal === 'stable' && [C.law, C.education, C.medicine].includes(category as typeof C.law)) reasons.push(`${category}\u7c7b\u4e13\u4e1a\u66f4\u8d34\u8fd1\u7a33\u5b9a\u5c31\u4e1a\u8bc9\u6c42`);
+  return reasons;
+}
+
+function filterAdmissions(admissions: AdmissionRecord[], userProfile: UserProfile, suitableMajors: Report['suitableMajors']): AdmissionRecord[] {
+  const suitableCategories = suitableMajors.map(item => item.category);
+  const userRank = userProfile.rank || estimateRankFromScore(userProfile);
+  return admissions.filter(record => {
+    const subjectMatch = record.subjectRequirement.some(req => req === userProfile.subjectCategory || userProfile.subjectCategory === 'other');
+    const majorMatch = userProfile.preferredMajors.length === 0 || isRelatedToPreferences(record, userProfile) || suitableCategories.includes(record.majorCategory);
+    const notExcluded = !userProfile.excludedMajors.some(excluded => record.majorName.includes(excluded) || getMajorCategory(record.majorName) === getMajorCategory(excluded));
+    const scoreWindow = record.lowestScore <= 0 || Math.abs(record.lowestScore - userProfile.score) <= 80;
+    const rankWindow = Math.abs(record.lowestRank - userRank) <= 70000 || record.lowestRank > userRank;
+    return subjectMatch && majorMatch && notExcluded && scoreWindow && rankWindow;
+  });
+}
+
+async function generateRecommendations(admissions: AdmissionRecord[], userProfile: UserProfile, userRank: number): Promise<Report['recommendations']> {
+  const grouped = groupAdmissionHistory(admissions);
+  const candidates = await Promise.all([...grouped.values()].map(records => createRecommendation(records, userProfile, userRank)));
+  const valid = candidates.filter((item): item is Recommendation => Boolean(item)).sort((a, b) => b.matchScore - a.matchScore);
+  return {
+    sprint: diversifyRecommendations(valid.filter(item => item.recommendationType === C.sprint), 6),
+    stable: diversifyRecommendations(valid.filter(item => item.recommendationType === C.stable), 8),
+    guarantee: diversifyRecommendations(valid.filter(item => item.recommendationType === C.guarantee), 6),
+    opportunities: diversifyRecommendations(valid.filter(item => item.isOpportunity), 5),
+  };
+}
+
+function groupAdmissionHistory(admissions: AdmissionRecord[]): Map<string, AdmissionRecord[]> {
+  const map = new Map<string, AdmissionRecord[]>();
+  for (const record of admissions) {
+    const key = `${record.universityCode}::${record.majorName}`;
+    const existing = map.get(key) || [];
+    existing.push(record);
+    map.set(key, existing.sort((a, b) => b.year - a.year));
+  }
+  return map;
+}
+
+function diversifyRecommendations(items: Recommendation[], limit: number): Recommendation[] {
+  const selected: Recommendation[] = [];
+  const remaining = [...items];
+  const categoryCount = new Map<string, number>();
+  const universityCount = new Map<string, number>();
+
+  while (selected.length < limit && remaining.length > 0) {
+    const index = remaining.findIndex(item => {
+      const category = item.major.category;
+      const university = item.university.name;
+      const maxPerCategory = selected.length < Math.ceil(limit * 0.75) ? 2 : 3;
+      return (categoryCount.get(category) || 0) < maxPerCategory && (universityCount.get(university) || 0) < 2;
+    });
+    const pickIndex = index >= 0 ? index : 0;
+    const [picked] = remaining.splice(pickIndex, 1);
+    selected.push(picked);
+    categoryCount.set(picked.major.category, (categoryCount.get(picked.major.category) || 0) + 1);
+    universityCount.set(picked.university.name, (universityCount.get(picked.university.name) || 0) + 1);
+  }
+  return selected;
+}
+
+async function createRecommendation(records: AdmissionRecord[], userProfile: UserProfile, userRank: number): Promise<Recommendation | null> {
+  const latest = records[0];
+  if (!latest) return null;
+  const rankDiff = latest.lowestRank - userRank;
+  const trend = calculateRankTrend(records);
+  const recommendationType = classifyRecommendation(rankDiff);
+  const matchScore = calculateMatchScore(latest, userProfile, rankDiff, trend);
+  const riskLevel = assessRisk(rankDiff, trend);
+  const university = fallbackUniversity(latest);
+  const major = fallbackMajor(latest);
+  const isOpportunity = detectOpportunity(records, userRank, latest, trend);
+  return {
+    university,
+    major,
+    admissionRecord: latest,
+    recommendationType,
+    matchScore,
+    admissionChance: calculateAdmissionChance(rankDiff, trend, recommendationType),
+    rankDiff,
+    isOpportunity,
+    reasons: generateRecommendationReasons(latest, userProfile, rankDiff, trend, isOpportunity),
+    evidence: records.slice(0, 3).map(record => ({ year: record.year, lowestScore: record.lowestScore, lowestRank: record.lowestRank, averageScore: record.averageScore, sourceName: record.dataSource, sourceUrl: record.sourceUrl })),
+    riskLevel,
+    riskNotes: generateRiskNotes(rankDiff, trend, recommendationType),
+  };
+}
+
+function classifyRecommendation(rankDiff: number): RecommendationType {
+  if (rankDiff < -5000) return C.sprint;
+  if (rankDiff <= 12000) return C.stable;
+  return C.guarantee;
+}
+function calculateRankTrend(records: AdmissionRecord[]): number {
+  if (records.length < 2) return 0;
+  return records[0].lowestRank - records[1].lowestRank;
+}
+function calculateMatchScore(record: AdmissionRecord, userProfile: UserProfile, rankDiff: number, trend: number): number {
+  let score = 72;
+  if (rankDiff >= 0 && rankDiff <= 5000) score += 15;
+  else if (rankDiff > 5000 && rankDiff <= 15000) score += 10;
+  else if (rankDiff < 0 && Math.abs(rankDiff) <= 8000) score += 4;
+  else if (rankDiff < -12000) score -= 18;
+  const preferenceScore = calculatePreferenceScore(record, userProfile);
+  score += preferenceScore;
+  if (['985', '211', 'double_first_class'].includes(record.universityLevel)) score += 3;
+  if (userProfile.preferredRegions.length > 0 && userProfile.preferredRegions.includes(getRegionByProvince(record.province))) score += 4;
+  if (trend > 3000) score += 5;
+  if (trend < -3000) score -= 4;
+  return Math.max(1, Math.min(100, Math.round(score)));
+}
+function calculatePreferenceScore(record: AdmissionRecord, userProfile: UserProfile): number {
+  if (isDirectPreferenceMatch(record, userProfile)) return 10;
+  if (isRelatedToPreferences(record, userProfile)) return 5;
+  return 0;
+}
+function isDirectPreferenceMatch(record: AdmissionRecord, userProfile: UserProfile): boolean {
+  return userProfile.preferredMajors.some(major => record.majorName.includes(major) || major.includes(record.majorName));
+}
+function isRelatedToPreferences(record: AdmissionRecord, userProfile: UserProfile): boolean {
+  if (userProfile.preferredMajors.length === 0) return true;
+  const recordCategory = getMajorCategory(record.majorName);
+  return userProfile.preferredMajors.some(major => {
+    const preferredCategory = getMajorCategory(major);
+    return recordCategory === preferredCategory || getAdjacentMajorCategories(preferredCategory).includes(recordCategory);
+  });
+}
+function getAdjacentMajorCategories(category: string): string[] {
+  const adjacent = new Map<string, string[]>([
+    [C.economics, [C.management, C.law, C.science]],
+    [C.management, [C.economics, C.engineering, C.law]],
+    [C.engineering, [C.science, C.management]],
+    [C.science, [C.engineering, C.medicine, C.economics]],
+    [C.medicine, [C.science, C.engineering]],
+    [C.law, [C.economics, C.management, C.literature]],
+    [C.literature, [C.law, C.education, C.management]],
+    [C.education, [C.literature, C.science]],
+    [C.agriculture, [C.science, C.engineering]],
+  ]);
+  return adjacent.get(category) || [];
+}
+function calculateAdmissionChance(rankDiff: number, trend: number, type: RecommendationType): number {
+  const base = type === C.guarantee ? 82 : type === C.stable ? 62 : 32;
+  const rankAdjust = Math.max(-18, Math.min(18, rankDiff / 1200));
+  const trendAdjust = Math.max(-8, Math.min(8, trend / 1500));
+  return Math.max(5, Math.min(95, Math.round(base + rankAdjust + trendAdjust)));
+}
+function detectOpportunity(records: AdmissionRecord[], userRank: number, latest: AdmissionRecord, trend: number): boolean {
+  const rankDiff = latest.lowestRank - userRank;
+  return records.length >= 2 && trend > 2500 && rankDiff >= -3000 && rankDiff <= 12000;
+}
+function assessRisk(rankDiff: number, trend: number): 'low' | 'medium' | 'high' {
+  if (rankDiff < -10000 || trend < -6000) return 'high';
+  if (rankDiff < 0 || trend < -2500) return 'medium';
+  return 'low';
+}
+
+
+function generateRecommendationReasons(record: AdmissionRecord, userProfile: UserProfile, rankDiff: number, trend: number, isOpportunity: boolean): string[] {
+  const reasons: string[] = [];
+  reasons.push(`\u53c2\u8003${record.year}\u5e74\u6700\u4f4e\u4f4d\u6b21${record.lowestRank}\uff0c\u4e0e\u4f60\u7684\u4f4d\u6b21\u5dee\u7ea6${Math.abs(rankDiff)}\u540d`);
+  if (trend > 0) reasons.push(`\u8fd1\u5e74\u5f55\u53d6\u6700\u4f4e\u4f4d\u6b21\u6709\u653e\u5bbd\u8d8b\u52bf\uff0c\u8f83\u4e0a\u4e00\u5e74\u589e\u52a0\u7ea6${trend}\u540d`);
+  if (trend < 0) reasons.push(`\u8fd1\u5e74\u5f55\u53d6\u6700\u4f4e\u4f4d\u6b21\u6709\u6536\u7d27\u8d8b\u52bf\uff0c\u8f83\u4e0a\u4e00\u5e74\u6536\u7d27\u7ea6${Math.abs(trend)}\u540d`);
+  if (isDirectPreferenceMatch(record, userProfile)) reasons.push('\u5339\u914d\u4f60\u7684\u4e13\u4e1a\u504f\u597d');
+  else if (isRelatedToPreferences(record, userProfile)) reasons.push('\u5c5e\u4e8e\u4f60\u5173\u6ce8\u65b9\u5411\u7684\u76f8\u8fd1\u4e13\u4e1a\uff0c\u7528\u4e8e\u6269\u5c55\u51b2\u7a33\u4fdd\u9009\u62e9');
+  if (isOpportunity) reasons.push('\u5386\u53f2\u4f4d\u6b21\u6ce2\u52a8\u63d0\u4f9b\u4e86\u4e00\u5b9a\u6361\u6f0f\u7a7a\u95f4\uff0c\u4f46\u9700\u8981\u63a7\u5236\u98ce\u9669');
+  reasons.push(`\u6570\u636e\u6765\u6e90\uff1a${record.dataSource}`);
+  return reasons;
+}
+function generateRiskNotes(rankDiff: number, trend: number, type: RecommendationType): string | undefined {
+  if (type === C.sprint) return '\u51b2\u523a\u5fd7\u613f\u5b58\u5728\u4e0d\u786e\u5b9a\u6027\uff0c\u5efa\u8bae\u653e\u5728\u524d\u90e8\u5e76\u642d\u914d\u8db3\u591f\u7a33\u59a5\u548c\u4fdd\u5e95\u5fd7\u613f';
+  if (trend < -3000) return '\u8fd1\u5e74\u5f55\u53d6\u4f4d\u6b21\u6536\u7d27\uff0c\u9700\u5173\u6ce8\u5f53\u5e74\u62db\u751f\u8ba1\u5212\u53d8\u5316';
+  if (type === C.guarantee) return '\u4fdd\u5e95\u5fd7\u613f\u4ecd\u9700\u786e\u8ba4\u9009\u79d1\u8981\u6c42\u3001\u5b66\u8d39\u548c\u6821\u533a\u7b49\u7ec6\u8282';
+  return undefined;
+}
+function generateRiskWarnings(userProfile: UserProfile, recommendations: Report['recommendations'], rankEstimated: boolean): string[] {
+  const warnings: string[] = [];
+  if (rankEstimated) warnings.push('\u5f53\u524d\u4f4d\u6b21\u7531\u5206\u6570\u4f30\u7b97\uff0c\u5efa\u8bae\u586b\u5199\u771f\u5b9e\u4e00\u5206\u4e00\u6bb5\u4f4d\u6b21\u540e\u91cd\u65b0\u751f\u6210');
+  if (recommendations.guarantee.length < 2) warnings.push('\u4fdd\u5e95\u5fd7\u613f\u6570\u91cf\u4e0d\u8db3\uff0c\u5efa\u8bae\u81f3\u5c11\u4fdd\u75592\u4e2a\u66f4\u5b89\u5168\u7684\u4fdd\u5e95\u9009\u62e9');
+  if (recommendations.sprint.length > recommendations.stable.length + recommendations.guarantee.length) warnings.push('\u51b2\u523a\u5fd7\u613f\u5360\u6bd4\u504f\u9ad8\uff0c\u5efa\u8bae\u964d\u4f4e\u6574\u4f53\u98ce\u9669');
+  if (userProfile.preferredMajors.length > 0 && userProfile.preferredMajors.length < 3) warnings.push('\u4e13\u4e1a\u504f\u597d\u8f83\u7a84\uff0c\u53ef\u80fd\u51cf\u5c11\u53ef\u9009\u9662\u6821\u8303\u56f4');
+  warnings.push('\u5f55\u53d6\u7ed3\u679c\u53d7\u62db\u751f\u8ba1\u5212\u3001\u9009\u79d1\u8981\u6c42\u548c\u5f53\u5e74\u62a5\u8003\u70ed\u5ea6\u5f71\u54cd\uff0c\u8bf7\u4ee5\u5b98\u65b9\u53d1\u5e03\u4e3a\u51c6');
+  return warnings;
+}
+function buildStrategyInsights(items: { title: string; category: string; content: string; source: string }[]): Report['strategyInsights'] {
+  return items.slice(0, 5).map(item => ({ title: item.title, category: item.category, summary: summarizeKnowledge(item.content), source: item.source }));
+}
+function summarizeKnowledge(content: string): string {
+  const plain = content.replace(/^# .+$/m, '').replace(/\n+/g, ' ').trim();
+  return plain.length > 120 ? `${plain.slice(0, 120)}...` : plain;
+}
+function buildRiskDiagnosis(userProfile: UserProfile, recommendations: Report['recommendations'], warnings: string[], rankEstimated: boolean): Report['riskDiagnosis'] {
+  const risks: NonNullable<Report['riskDiagnosis']> = [];
+  if (rankEstimated) risks.push({ type: 'rank', level: 'medium', message: '\u5f53\u524d\u4f7f\u7528\u4f30\u7b97\u4f4d\u6b21', suggestion: '\u62ff\u5230\u4e00\u5206\u4e00\u6bb5\u8868\u540e\u7684\u771f\u5b9e\u4f4d\u6b21\u540e\u91cd\u65b0\u751f\u6210\uff0c\u63a8\u8350\u4f1a\u66f4\u51c6\u3002' });
+  if (recommendations.guarantee.length < 2) risks.push({ type: 'rank', level: 'high', message: '\u4fdd\u5e95\u5fd7\u613f\u6570\u91cf\u504f\u5c11', suggestion: '\u6269\u5927\u5730\u57df\u6216\u964d\u4f4e\u9662\u6821\u5c42\u7ea7\uff0c\u81f3\u5c11\u8865\u8db32\u4e2a\u53ef\u63a5\u53d7\u7684\u4fdd\u5e95\u9009\u62e9\u3002' });
+  if (userProfile.preferredMajors.length > 0 && userProfile.preferredMajors.length < 3) risks.push({ type: 'major', level: 'medium', message: '\u4e13\u4e1a\u504f\u597d\u8fc7\u7a84', suggestion: '\u5728\u4e3b\u4e13\u4e1a\u4e4b\u5916\u589e\u52a0\u76f8\u8fd1\u4e13\u4e1a\uff0c\u4f8b\u5982\u7535\u5b50\u4fe1\u606f\u3001\u81ea\u52a8\u5316\u3001\u6570\u636e\u79d1\u5b66\u7b49\u5907\u9009\u65b9\u5411\u3002' });
+  if (userProfile.preferredRegions.length === 0) risks.push({ type: 'region', level: 'low', message: '\u5730\u57df\u504f\u597d\u672a\u660e\u786e', suggestion: '\u786e\u8ba4\u80fd\u63a5\u53d7\u7684\u57ce\u5e02\u548c\u4e0d\u80fd\u63a5\u53d7\u7684\u5730\u533a\uff0c\u907f\u514d\u540e\u7eed\u5f55\u53d6\u540e\u53cd\u6094\u3002' });
+  if (warnings.some(item => item.includes('Tavily') || item.includes('\u7f51\u9875'))) risks.push({ type: 'data', level: 'medium', message: '\u5b58\u5728\u7f51\u9875\u8865\u5145\u8bc1\u636e', suggestion: '\u7f51\u9875\u4fe1\u606f\u53ea\u4f5c\u8865\u5145\uff0c\u6700\u7ec8\u4ee5\u7701\u8003\u8bd5\u9662\u548c\u9ad8\u6821\u62db\u751f\u7f51\u53d1\u5e03\u4e3a\u51c6\u3002' });
+  return risks.slice(0, 6);
+}
+function collectDataSources(records: AdmissionRecord[]): Report['dataSources'] {
+  const map = new Map<string, Report['dataSources'][number]>();
+  for (const record of records) {
+    const key = `${record.dataSource}-${record.year}`;
+    if (!map.has(key)) map.set(key, { name: record.dataSource, year: record.year, url: record.sourceUrl, collectedAt: record.collectedAt });
+  }
+  return [...map.values()].sort((a, b) => b.year - a.year).slice(0, 8);
+}
+function generatePositionDescription(rankPercentile: number, province: Province, rankEstimated: boolean): string {
+  const prefix = rankEstimated ? '\u6309\u5206\u6570\u4f30\u7b97\uff1a' : '';
+  const provinceName = PROVINCE_LABEL[province];
+  if (rankPercentile < 5) return `${prefix}\u5728${provinceName}\u7ea6\u5904\u4e8e\u524d${rankPercentile.toFixed(1)}%\uff0c\u53ef\u91cd\u70b9\u5173\u6ce8\u9ad8\u5c42\u6b21\u9662\u6821\u7684\u51b2\u7a33\u7ec4\u5408\u3002`;
+  if (rankPercentile < 15) return `${prefix}\u5728${provinceName}\u7ea6\u5904\u4e8e\u524d${rankPercentile.toFixed(1)}%\uff0c\u5efa\u8bae\u517c\u987e\u4f18\u8d28\u9662\u6821\u548c\u4e13\u4e1a\u5339\u914d\u3002`;
+  if (rankPercentile < 30) return `${prefix}\u5728${provinceName}\u5904\u4e8e\u4e2d\u4e0a\u533a\u95f4\uff0c\u9002\u5408\u7528\u51b2\u523a\u3001\u7a33\u59a5\u3001\u4fdd\u5e95\u5f62\u6210\u68af\u5ea6\u3002`;
+  if (rankPercentile < 50) return `${prefix}\u5728${provinceName}\u5904\u4e8e\u4e2d\u4f4d\u533a\u95f4\uff0c\u5efa\u8bae\u4f18\u5148\u4fdd\u8bc1\u7a33\u59a5\u548c\u4fdd\u5e95\u5fd7\u613f\u6570\u91cf\u3002`;
+  return `${prefix}\u5728${provinceName}\u7ade\u4e89\u538b\u529b\u8f83\u9ad8\uff0c\u5e94\u91cd\u70b9\u63a7\u5236\u98ce\u9669\u5e76\u6269\u5927\u9662\u6821\u4e13\u4e1a\u8303\u56f4\u3002`;
+}
+function getRegionByProvince(province: Province): Region {
+  const regionMap: Record<Province, Region> = { zhejiang: 'east', shandong: 'east' };
+  return regionMap[province];
+}
+function fallbackUniversity(record: AdmissionRecord): University {
+  return { code: record.universityCode, name: record.universityName, province: record.province, city: '\u5f85\u8865\u5145', level: record.universityLevel, type: inferUniversityType(record.universityName, record.majorCategory) };
+}
+function fallbackMajor(record: AdmissionRecord): Major {
+  return { code: `major-${record.majorName}`, name: record.majorName, category: record.majorCategory };
+}
+function inferUniversityType(_schoolName: string, majorCategory: string): University['type'] {
+  if (majorCategory === C.medicine) return 'medical';
+  if (majorCategory === C.education) return 'normal';
+  if (majorCategory === C.economics) return 'financial';
+  if (majorCategory === C.law) return 'political';
+  if (majorCategory === C.agriculture) return 'agricultural';
+  if (majorCategory === C.engineering) return 'engineering';
+  return 'comprehensive';
+}
+
