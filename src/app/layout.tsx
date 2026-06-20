@@ -4,52 +4,28 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: {
-    default: '新应用 | 扣子编程',
-    template: '%s | 扣子编程',
+    default: '\u0041\u0049\u5fd7\u613f\u586b\u62a5\u52a9\u624b',
+    template: '%s | \u0041\u0049\u5fd7\u613f\u586b\u62a5\u52a9\u624b',
   },
   description:
-    '扣子编程是一款一站式云端 Vibe Coding 开发平台。通过对话轻松构建智能体、工作流和网站，实现从创意到上线的无缝衔接。',
+    '\u57fa\u4e8e\u672c\u5730\u5f55\u53d6\u6570\u636e\u3001\u8001\u5e08\u65b9\u6cd5\u8bba\u548c\u0041\u0049\u5206\u6790\u7684\u9ad8\u8003\u5fd7\u613f\u586b\u62a5\u8f85\u52a9\u5de5\u5177\uff0c\u5e2e\u52a9\u8003\u751f\u751f\u6210\u51b2\u7a33\u4fdd\u63a8\u8350\u62a5\u544a\u3002',
   keywords: [
-    '扣子编程',
-    'Coze Code',
-    'Vibe Coding',
-    'AI 编程',
-    '智能体搭建',
-    '工作流搭建',
-    '网站搭建',
-    '网站部署',
-    '全栈开发',
-    'AI 工程师',
+    '\u9ad8\u8003\u5fd7\u613f\u586b\u62a5',
+    '\u0041\u0049\u5fd7\u613f\u586b\u62a5',
+    '\u5f55\u53d6\u6570\u636e',
+    '\u51b2\u7a33\u4fdd',
+    '\u9662\u6821\u63a8\u8350',
   ],
-  authors: [{ name: 'Coze Code Team', url: 'https://code.coze.cn' }],
-  generator: 'Coze Code',
-  // icons: {
-  //   icon: '',
-  // },
+  authors: [{ name: 'gaokao-admission-agent' }],
+  generator: 'Next.js',
   openGraph: {
-    title: '扣子编程 | 你的 AI 工程师已就位',
+    title: '\u0041\u0049\u5fd7\u613f\u586b\u62a5\u52a9\u624b',
     description:
-      '我正在使用扣子编程 Vibe Coding，让创意瞬间上线。告别拖拽，拥抱心流。',
-    url: 'https://code.coze.cn',
-    siteName: '扣子编程',
+      '\u8f93\u5165\u7701\u4efd\u3001\u5206\u6570\u3001\u4f4d\u6b21\u548c\u4e13\u4e1a\u504f\u597d\uff0c\u57fa\u4e8e\u672c\u5730\u771f\u5b9e\u5f55\u53d6\u6570\u636e\u751f\u6210\u5fd7\u613f\u63a8\u8350\u62a5\u544a\u3002',
+    siteName: '\u0041\u0049\u5fd7\u613f\u586b\u62a5\u52a9\u624b',
     locale: 'zh_CN',
     type: 'website',
-    // images: [
-    //   {
-    //     url: '',
-    //     width: 1200,
-    //     height: 630,
-    //     alt: '扣子编程 - 你的 AI 工程师',
-    //   },
-    // ],
   },
-  // twitter: {
-  //   card: 'summary_large_image',
-  //   title: 'Coze Code | Your AI Engineer is Here',
-  //   description:
-  //     'Build and deploy full-stack applications through AI conversation. No env setup, just flow.',
-  //   // images: [''],
-  // },
   robots: {
     index: true,
     follow: true,
@@ -64,7 +40,7 @@ export default function RootLayout({
   const isDev = process.env.COZE_PROJECT_ENV === 'DEV';
 
   return (
-    <html lang="en">
+    <html lang="zh-CN">
       <body className={`antialiased`}>
         {isDev && <Inspector />}
         {children}
