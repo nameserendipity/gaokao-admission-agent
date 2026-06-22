@@ -83,3 +83,45 @@ export function getAllowedMajorNames(subjectCategory: SubjectCategory): string[]
 export function getAllowedMajorCategories(subjectCategory: SubjectCategory): string[] { return [...new Set(getAllowedMajorOptions(subjectCategory).map(option => option.category))]; }
 export function isMajorAllowedForSubject(majorName: string, subjectCategory: SubjectCategory): boolean { const text = majorName.trim(); if (!text) return false; if (/\u9662\u6821\u4e13\u4e1a\u7ec4|\u672a\u6ce8\u660e\u4e13\u4e1a/.test(text)) return true; return getAllowedMajorOptions(subjectCategory).some(option => option.aliases.some(alias => text.includes(alias) || alias.includes(text))); }
 export function filterMajorsBySubject(majors: string[], subjectCategory: SubjectCategory | undefined): string[] { if (!subjectCategory) return []; return majors.filter(major => isMajorAllowedForSubject(major, subjectCategory)); }
+
+export function inferSubjectCategoriesFromRequirement(text: string): SubjectCategory[] | undefined {
+  const requirement = parseAdmissionRequirement(text);
+  if (!requirement) return undefined;
+  return SUBJECT_COMBINATIONS.filter(subjectCategory => admissionRequirementMatches(subjectCategory, requirement));
+}
+
+export function isAdmissionRequirementAllowedForSubject(text: string, subjectCategory: SubjectCategory): boolean | undefined {
+  const requirement = parseAdmissionRequirement(text);
+  if (!requirement) return undefined;
+  return admissionRequirementMatches(subjectCategory, requirement);
+}
+
+interface ParsedAdmissionRequirement { primary?: PrimarySubject; electives: ElectiveSubject[]; }
+
+function parseAdmissionRequirement(text: string): ParsedAdmissionRequirement | undefined {
+  const normalized = text.replace(/\s+/g, '').replace(/[，、；;|/]/g, ',');
+  const primary = /首选物理|限物理|物\+|物理\+|物\/|物理\//.test(normalized)
+    ? 'physics'
+    : /首选历史|限历史|史\+|历史\+|史\/|历史\//.test(normalized)
+      ? 'history'
+      : undefined;
+  const hasExplicitSubjectMarker = Boolean(primary) || /再选|选考|限科|限选|科目要求|不提科目要求|物\+|史\+|历史\+|物理\+/.test(normalized);
+  if (!hasExplicitSubjectMarker) return undefined;
+  const electives = new Set<ElectiveSubject>();
+  const electiveText = normalized.replace(/首选物理|首选历史|限物理|限历史/g, '');
+  if (/再选不限|不限|不提科目要求|无科目要求/.test(electiveText)) {
+    return primary ? { primary, electives: [] } : undefined;
+  }
+  if (/再选化学|限化学|化学|化/.test(electiveText)) electives.add('chemistry');
+  if (/再选生物|限生物|生物|生/.test(electiveText)) electives.add('biology');
+  if (/再选政治|思想政治|限政治|政治|政/.test(electiveText)) electives.add('politics');
+  if (/再选地理|限地理|地理|地/.test(electiveText)) electives.add('geography');
+  if (!primary && electives.size === 0) return undefined;
+  return { primary, electives: [...electives] };
+}
+
+function admissionRequirementMatches(subjectCategory: SubjectCategory, requirement: ParsedAdmissionRequirement): boolean {
+  const selection = getSubjectSelection(subjectCategory);
+  if (requirement.primary && selection.primarySubject !== requirement.primary) return false;
+  return requirement.electives.every(elective => selection.electiveSubjects.includes(elective));
+}
