@@ -188,7 +188,7 @@ export default function ReportPage() {
               <CardContent className="p-6 md:p-7">
                 <SectionTitle
                   title={isArtSportsReport ? '\u9662\u6821\u4e13\u4e1a\u7ec4\u51b2\u7a33\u4fdd\u63a8\u8350' : '\u51b2\u7a33\u4fdd\u63a8\u8350'}
-                  subtitle={isArtSportsReport ? '\u6309\u827a\u4f53\u7c7b\u522b\u3001\u6295\u6863\u7efc\u5408\u5206\u548c\u6295\u6863\u6392\u540d\u5206\u5c42\uff1b\u5177\u4f53\u7ec4\u5185\u4e13\u4e1a\u9700\u67e5\u62db\u751f\u8ba1\u5212' : '\u6309\u4f4d\u6b21\u5dee\u3001\u8d8b\u52bf\u548c\u4e13\u4e1a\u5339\u914d\u5ea6\u5206\u5c42'}
+                  subtitle={isArtSportsReport ? (report.userProfile.candidateType === 'sports' ? '按体育类别、体育专业投档分/专业分和投档排名分层；具体组内专业需查招生计划' : '按艺术类别、投档综合分和投档排名分层；具体组内专业需查招生计划') : '\u6309\u4f4d\u6b21\u5dee\u3001\u8d8b\u52bf\u548c\u4e13\u4e1a\u5339\u914d\u5ea6\u5206\u5c42'}
                 />
                 {recommendationNotices.length > 0 && (
                   <div className="mt-5 grid gap-3">
@@ -207,7 +207,7 @@ export default function ReportPage() {
                 </div>
               </CardContent>
             </Card>
-            <Card className="rounded-[1.5rem] border-slate-200 shadow-sm print:hidden"><CardContent className="p-6 md:p-7"><SectionTitle title="报告追问 Agent" subtitle="继续问哪个更稳、是否值得冲、专业风险是什么" /><div className="mt-5 max-h-96 space-y-3 overflow-auto rounded-2xl bg-slate-50 p-4">{messages.length === 0 && <p className="text-sm text-slate-500">可以问：哪几个志愿最稳？计算机要不要换成电子信息？保底还缺不缺？</p>}{messages.map(message => <div key={message.id} className={message.role === 'user' ? 'ml-auto max-w-[85%] rounded-2xl bg-blue-700 p-3 text-white' : 'max-w-[85%] rounded-2xl bg-white p-3 text-slate-700 shadow-sm'}><p className="mb-1 text-xs opacity-70">{message.role === 'user' ? '你' : 'Agent'}</p><p className="whitespace-pre-wrap text-sm leading-6">{message.content}</p></div>)}</div><div className="mt-4"><Textarea value={question} onChange={event => setQuestion(event.target.value)} placeholder="例如：我更想保专业，应该删掉哪些冲刺？" className="min-h-24 rounded-2xl border-slate-200 bg-white" /><Button onClick={handleAsk} disabled={chatLoading || !question.trim()} className="mt-3 rounded-full bg-blue-700 px-5 text-white hover:bg-blue-800">{chatLoading ? '分析中...' : '提交追问'}</Button></div></CardContent></Card>
+            <Card className="rounded-[1.5rem] border-slate-200 shadow-sm print:hidden"><CardContent className="p-6 md:p-7"><SectionTitle title="报告追问 Agent" subtitle="继续问哪个更稳、是否值得冲、专业风险是什么" /><div className="mt-5 max-h-96 space-y-3 overflow-auto rounded-2xl bg-slate-50 p-4">{messages.length === 0 && <p className="text-sm text-slate-500">可以问：哪几个志愿最稳？计算机要不要换成电子信息？保底还缺不缺？</p>}{messages.map(message => <div key={message.id} className={message.role === 'user' ? 'ml-auto max-w-[85%] rounded-2xl bg-blue-700 p-3 text-white' : 'max-w-[85%] rounded-2xl bg-white p-3 text-slate-700 shadow-sm'}><p className="mb-1 text-xs opacity-70">{message.role === 'user' ? '你' : 'Agent'}</p><p className="whitespace-pre-wrap text-sm leading-6">{sanitizeAgentMessageContent(message.content)}</p></div>)}</div><div className="mt-4"><Textarea value={question} onChange={event => setQuestion(event.target.value)} placeholder="例如：我更想保专业，应该删掉哪些冲刺？" className="min-h-24 rounded-2xl border-slate-200 bg-white" /><Button onClick={handleAsk} disabled={chatLoading || !question.trim()} className="mt-3 rounded-full bg-blue-700 px-5 text-white hover:bg-blue-800">{chatLoading ? '分析中...' : '提交追问'}</Button></div></CardContent></Card>
           </div>
           <aside className="space-y-6 lg:sticky lg:top-24 lg:self-start"><Card className="rounded-[1.5rem] border-slate-200 shadow-sm"><CardContent className="p-6"><SectionTitle title="风险诊断" subtitle={topRisk ? topRisk.message : '当前未发现高风险项'} compact /><div className="mt-5 space-y-3">{(report.riskDiagnosis || []).length === 0 && <p className="text-sm text-slate-500">暂无额外风险诊断。</p>}{(report.riskDiagnosis || []).map((risk, index) => <div key={`${risk.type}-${index}`} className={`rounded-2xl border p-4 ${riskTone[risk.level]}`}><div className="mb-2 flex items-center justify-between gap-3"><span className="text-sm font-semibold">{risk.message}</span><span className="rounded-full bg-white/70 px-2 py-0.5 text-xs">{risk.level}</span></div><p className="text-sm leading-6 opacity-90">{risk.suggestion}</p></div>)}</div></CardContent></Card><Card className="rounded-[1.5rem] border-slate-200 shadow-sm"><CardContent className="p-6"><SectionTitle title="策略依据" subtitle="来自项目内老师方法论知识库" compact /><div className="mt-5 space-y-3">{(report.strategyInsights || []).map(item => <div key={`${item.category}-${item.title}`} className="rounded-2xl border border-slate-200 bg-white p-4"><div className="mb-2 flex items-center gap-2"><Badge variant="secondary" className="rounded-full">{item.category}</Badge><p className="text-sm font-semibold">{item.title}</p></div><p className="text-xs leading-5 text-slate-500">{item.summary}</p></div>)}</div></CardContent></Card><Card className="rounded-[1.5rem] border-slate-200 shadow-sm"><CardContent className="p-6"><SectionTitle title="数据来源" subtitle="所有录取数据都可回溯" compact /><div className="mt-5 space-y-3">{report.dataSources.map((source, idx) => <div key={`${source.name}-${source.year}-${idx}`} className="rounded-2xl bg-slate-50 p-4"><p className="text-sm font-medium text-slate-800">{source.name}</p><p className="mt-1 text-xs text-slate-500">{source.year}年录取数据{source.collectedAt ? ` · ${new Date(source.collectedAt).toLocaleDateString('zh-CN')}` : ''}</p>{source.url && <Link href={source.url} target="_blank" className="mt-2 inline-block text-xs font-medium text-blue-700 hover:underline">查看来源</Link>}</div>)}</div></CardContent></Card></aside>
         </div>
@@ -257,6 +257,9 @@ function RecommendationSection({ title, description, tone, items }: { title: str
 
 function RecommendationCard({ rec }: { rec: Recommendation }) {
   const isArtSports = rec.admissionRecord.id.startsWith('art-sports-');
+  const isSportsRecommendation = isArtSports && rec.admissionRecord.majorCategory.includes('\u4f53\u80b2');
+  const artSportsScoreLabel = isSportsRecommendation ? '\u4f53\u80b2\u4e13\u4e1a\u6295\u6863\u5206' : '\u6295\u6863\u7efc\u5408\u5206';
+  const artSportsRankLabel = isSportsRecommendation ? '\u4f53\u80b2\u6295\u6863\u6392\u540d' : '\u6295\u6863\u6392\u540d';
   const rawGroupInfo = extractRawGroupInfo(rec.admissionRecord.notes);
   const visibleNotes = stripRawGroupInfo(rec.admissionRecord.notes);
 
@@ -273,8 +276,8 @@ function RecommendationCard({ rec }: { rec: Recommendation }) {
           <p className="mt-2 text-sm text-slate-700">{rec.major.name}{' \u00b7 '}{rec.major.category}</p>
           <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
             <span>{rec.admissionRecord.year}{'\u5e74'}</span>
-            <span>{isArtSports ? '\u6295\u6863\u7efc\u5408\u5206' : '\u6700\u4f4e\u5206'} {rec.admissionRecord.lowestScore}</span>
-            <span>{isArtSports ? '\u6295\u6863\u6392\u540d' : '\u6700\u4f4e\u4f4d\u6b21'} {rec.admissionRecord.lowestRank || '-'}</span>
+            <span>{isArtSports ? artSportsScoreLabel : '\u6700\u4f4e\u5206'} {rec.admissionRecord.lowestScore}</span>
+            <span>{isArtSports ? artSportsRankLabel : '\u6700\u4f4e\u4f4d\u6b21'} {rec.admissionRecord.lowestRank || '-'}</span>
             {!isArtSports && <span>{'\u4f4d\u6b21\u5dee'} {rec.rankDiff ?? '-'}</span>}
             <span>{'\u53c2\u8003\u6982\u7387'} {rec.admissionChance ?? '-'}%</span>
             {isArtSports && visibleNotes && <span>{visibleNotes}</span>}
@@ -312,4 +315,11 @@ function extractRawGroupInfo(notes?: string): string | undefined {
 function stripRawGroupInfo(notes?: string): string | undefined {
   const visible = notes?.split('\uFF1B').filter(item => !item.startsWith('\u539f\u59cb\u4e13\u4e1a\u7ec4\u4fe1\u606f\uFF1A')).join('\uFF1B').trim();
   return visible || undefined;
+}
+
+function sanitizeAgentMessageContent(content: string): string {
+  return content
+    .replace(/\n{0,2}\u5df2\u8c03\u7528\u5de5\u5177\uff1a[\s\S]*$/g, '')
+    .replace(/\n{0,2}\u5de5\u5177\u63d0\u793a\uff1a[\s\S]*$/g, '')
+    .trim();
 }

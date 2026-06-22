@@ -27,7 +27,7 @@ export async function answerReportQuestion(report: Report, question: string, his
     { role: 'user', content: trimmed },
   ];
   return callDeepSeek(messages)
-    .then(answer => appendToolFooter(answer, toolResult))
+    .then(answer => sanitizeAssistantText(answer))
     .catch(() => buildToolBackedRuleAnswer(report, toolResult));
 }
 
@@ -72,34 +72,17 @@ function buildToolBackedRuleAnswer(report: Report, toolResult: AgentToolResult):
   const reportEvidence = toolResult.evidences.find(item => item.tool === 'report');
   const localEvidence = toolResult.evidences.find(item => item.tool === 'local_admission_db');
   const webEvidence = toolResult.evidences.find(item => item.tool === 'tavily_search');
-  const tools = toolResult.usedTools.join('\u3001') || '\u5f53\u524d\u62a5\u544a';
-  const lines = [`\u6211\u5df2\u5148\u8c03\u7528\u5de5\u5177\u6838\u5bf9\uff1a${tools}\u3002`];
+  const lines = ['\u6211\u6839\u636e\u5f53\u524d\u62a5\u544a\u548c\u53ef\u7528\u5f55\u53d6\u6570\u636e\u6838\u5bf9\u5982\u4e0b\u3002'];
   const reportItems = Array.isArray(reportEvidence?.data) ? reportEvidence.data.slice(0, 3) as EvidenceLine[] : [];
   if (reportItems.length > 0) { lines.push('\u5f53\u524d\u62a5\u544a\u4e2d\u6700\u76f8\u5173\u7684\u8bc1\u636e\uff1a'); reportItems.forEach(item => lines.push(formatEvidenceLine(item))); }
   const localItems = Array.isArray(localEvidence?.data) ? localEvidence.data.slice(0, 5) as EvidenceLine[] : [];
-  if (localItems.length > 0) { lines.push('\u672c\u5730\u6570\u636e\u5e93\u8865\u67e5\u5230\u7684\u5019\u9009\uff1a'); localItems.forEach(item => lines.push(formatEvidenceLine(item))); }
+  if (localItems.length > 0) { lines.push('\u8865\u5145\u6838\u5bf9\u5230\u7684\u5019\u9009\uff1a'); localItems.forEach(item => lines.push(formatEvidenceLine(item))); }
   if (webEvidence) lines.push(webEvidence.summary);
   if (toolResult.warnings.length > 0) lines.push(`\u6ce8\u610f\uff1a${[...new Set(toolResult.warnings)].slice(0, 3).join('\uFF1B')}`);
   lines.push(report.disclaimer);
   return sanitizeAssistantText(lines.join('\n'));
 }
 
-
-function appendToolFooter(answer: string, toolResult: AgentToolResult): string {
-  const labels: Record<AgentToolResult['usedTools'][number], string> = {
-    report: '当前报告',
-    local_admission_db: '\u672c\u5730\u5f55\u53d6\u6570\u636e\u5e93',
-    admission_trend_lookup: '\u5f55\u53d6\u8d8b\u52bf\u8865\u67e5',
-    teacher_knowledge: '\u8001\u5e08\u65b9\u6cd5\u8bba\u77e5\u8bc6\u5e93',
-    tavily_search: 'Tavily 网页检索',
-  };
-  const used = toolResult.usedTools.map(tool => labels[tool]).join('、');
-  const warnings = toolResult.warnings.length > 0 ? `
-工具提示：${[...new Set(toolResult.warnings)].slice(0, 2).join('；')}` : '';
-  return sanitizeAssistantText(`${answer}
-
-已调用工具：${used || '当前报告'}${warnings}`);
-}
 
 type EvidenceLine = { type?: string; university?: string; major?: string; rank?: number; score?: number; source?: string };
 
@@ -109,5 +92,11 @@ function formatEvidenceLine(item: EvidenceLine): string {
 }
 
 function sanitizeAssistantText(text: string): string {
-  return text.replace(/\*\*(.*?)\*\*/g, '$1').replace(/^#{1,6}\s*/gm, '').replace(/\n{3,}/g, '\n\n').trim();
+  return text
+    .replace(/\n{0,2}\u5df2\u8c03\u7528\u5de5\u5177\uff1a[\s\S]*$/g, '')
+    .replace(/\n{0,2}\u5de5\u5177\u63d0\u793a\uff1a[\s\S]*$/g, '')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/^#{1,6}\s*/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
