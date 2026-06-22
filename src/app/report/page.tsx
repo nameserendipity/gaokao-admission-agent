@@ -54,6 +54,7 @@ export default function ReportPage() {
         return;
       }
 
+      const cached = sessionStorage.getItem('report');
       try {
         const response = await fetch(`/api/reports/${reportId}`);
         const payload = (await response.json()) as Partial<ReportPreviewResponse> & { error?: string };
@@ -67,7 +68,12 @@ export default function ReportPage() {
           setMessages(chatPayload.messages || []);
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : '报告读取失败');
+        if (cached) {
+          setReport(JSON.parse(cached) as Report);
+          setError(null);
+          return;
+        }
+        setError(err instanceof Error ? err.message : '\u62a5\u544a\u8bfb\u53d6\u5931\u8d25');
       }
     };
     void load();
