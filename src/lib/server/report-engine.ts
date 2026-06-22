@@ -277,16 +277,15 @@ async function generateRecommendationsWithFallback(
   const addFallback = (type: RecommendationType, minCount: number) => {
     const current = merged.filter(item => item.recommendationType === type).length;
     if (current >= minCount) return;
-    const fallbackPool = noPreferenceMode ? [...relaxedCandidates, ...broadCandidates] : relaxedCandidates;
+    const fallbackPool = type === C.guarantee ? [...relaxedCandidates, ...broadCandidates] : noPreferenceMode ? [...relaxedCandidates, ...broadCandidates] : relaxedCandidates;
     const fallback = fallbackPool
       .filter(item => item.recommendationType === type && !merged.some(existing => sameRecommendation(existing, item)))
       .slice(0, minCount - current);
     if (fallback.length > 0) {
-      merged.push(...fallback.map(item => noPreferenceMode ? markBroadRecommendation(item) : markFallbackRecommendation(item)));
-      warnings.push(noPreferenceMode ? `${type}候选数量不足，已按分数/位次优先补充广谱院校。` : `${type}候选数量不足，已放宽专业或地域条件补充相近院校。`);
+      merged.push(...fallback.map(item => noPreferenceMode ? markBroadRecommendation(item) : type === C.guarantee ? markExpandedGuaranteeRecommendation(item) : markFallbackRecommendation(item)));
+      warnings.push(noPreferenceMode ? `${type}\u5019\u9009\u6570\u91cf\u4e0d\u8db3\uff0c\u5df2\u6309\u5206\u6570/\u4f4d\u6b21\u4f18\u5148\u8865\u5145\u5e7f\u8c31\u9662\u6821\u3002` : type === C.guarantee ? '\u4fdd\u5e95\u5019\u9009\u6570\u91cf\u4e0d\u8db3\uff0c\u5df2\u5728\u9075\u5b88\u9009\u79d1\u786c\u89c4\u5219\u7684\u524d\u63d0\u4e0b\u653e\u5bbd\u4e13\u4e1a\u6216\u5730\u57df\u504f\u597d\uff0c\u8865\u5145\u6269\u5c55\u4fdd\u5e95\u3002' : `${type}\u5019\u9009\u6570\u91cf\u4e0d\u8db3\uff0c\u5df2\u653e\u5bbd\u4e13\u4e1a\u6216\u5730\u57df\u6761\u4ef6\u8865\u5145\u76f8\u8fd1\u9662\u6821\u3002`);
     }
   };
-
   addFallback(C.stable, noPreferenceMode ? 5 : 3);
   addFallback(C.guarantee, noPreferenceMode ? 4 : 2);
   addFallback(C.sprint, noPreferenceMode ? 3 : 2);
@@ -319,6 +318,16 @@ function markFallbackRecommendation(item: Recommendation): Recommendation {
     matchScore: Math.max(1, item.matchScore - 6),
     reasons: [...item.reasons, '该候选来自放宽条件后的补充匹配，需重点复核专业、地域和招生计划。'],
     riskNotes: item.riskNotes ? `${item.riskNotes}；该项为补充候选，请谨慎排序。` : '该项为补充候选，建议结合专业接受度、城市和招生章程谨慎判断。',
+  };
+}
+
+
+function markExpandedGuaranteeRecommendation(item: Recommendation): Recommendation {
+  return {
+    ...item,
+    matchScore: Math.max(1, item.matchScore - 4),
+    reasons: [...item.reasons, '\u6269\u5c55\u4fdd\u5e95\uff1a\u5728\u4fdd\u5e95\u6570\u91cf\u4e0d\u8db3\u65f6\u8865\u5165\uff0c\u5df2\u653e\u5bbd\u4e13\u4e1a\u6216\u5730\u57df\u504f\u597d\uff0c\u4f46\u4ecd\u4fdd\u7559\u9009\u79d1\u8981\u6c42\u548c\u4e13\u4e1a\u65b9\u5411\u786c\u6821\u9a8c\u3002'],
+    riskNotes: item.riskNotes ? `${item.riskNotes}\uff1b\u8be5\u9879\u4e3a\u6269\u5c55\u4fdd\u5e95\uff0c\u6b63\u5f0f\u586b\u62a5\u524d\u4ecd\u9700\u786e\u8ba4\u4e13\u4e1a\u3001\u6821\u533a\u3001\u5b66\u8d39\u548c\u62db\u751f\u8ba1\u5212\u3002` : '\u8be5\u9879\u4e3a\u6269\u5c55\u4fdd\u5e95\uff0c\u6b63\u5f0f\u586b\u62a5\u524d\u4ecd\u9700\u786e\u8ba4\u4e13\u4e1a\u3001\u6821\u533a\u3001\u5b66\u8d39\u548c\u62db\u751f\u8ba1\u5212\u3002',
   };
 }
 
@@ -429,10 +438,11 @@ function classifyScoreFallbackRecommendation(rankDiff: number): RecommendationTy
 function getRankWindow(anchorRank: number): RankWindow {
   if (anchorRank <= 5000) return { sprintMax: 2500, stableMax: 3000, guaranteeMax: 8000 };
   if (anchorRank <= 10000) return { sprintMax: 4000, stableMax: 5000, guaranteeMax: 12000 };
-  if (anchorRank <= 30000) return { sprintMax: 8000, stableMax: 10000, guaranteeMax: 25000 };
-  if (anchorRank <= 80000) return { sprintMax: 15000, stableMax: 20000, guaranteeMax: 45000 };
-  return { sprintMax: 25000, stableMax: 30000, guaranteeMax: 70000 };
+  if (anchorRank <= 30000) return { sprintMax: 8000, stableMax: 9000, guaranteeMax: 30000 };
+  if (anchorRank <= 80000) return { sprintMax: 15000, stableMax: 15000, guaranteeMax: 60000 };
+  return { sprintMax: 25000, stableMax: 18000, guaranteeMax: 90000 };
 }
+
 function calculateRankTrend(records: AdmissionRecord[]): number {
   if (records.length < 2) return 0;
   return records[0].lowestRank - records[1].lowestRank;
