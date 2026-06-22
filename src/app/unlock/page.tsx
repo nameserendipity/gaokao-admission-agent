@@ -3,244 +3,229 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { ArrowRight, Check, FileText, LockKeyhole, ShieldCheck, Sparkles, TriangleAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+
+const reportHighlights = [
+  {
+    title: '冲稳保完整清单',
+    desc: '不是只给几个学校名，而是拆成冲刺、稳妥、保底和捡漏候选，方便直接做志愿梯度。',
+  },
+  {
+    title: '专业避雷诊断',
+    desc: '提示选科限制、专业过热、就业稳定性、调剂风险，避免“分够了但不适合”。',
+  },
+  {
+    title: '每条推荐都有证据',
+    desc: '展示年份、最低分/位次、来源文件，不用只听一句“AI觉得合适”。',
+  },
+  {
+    title: '后续可继续追问',
+    desc: '解锁后可以围绕某所学校、某个专业、是否冲刺继续问，不用自己翻几十张表。',
+  },
+];
+
+const lockedItems = [
+  '完整院校/专业名称',
+  '录取概率与位次差',
+  '冲稳保排序建议',
+  '风险原因与替代方案',
+  '数据来源与年份证据',
+];
 
 export default function UnlockPage() {
   const router = useRouter();
   const [processing, setProcessing] = useState(false);
 
   const handleUnlock = async () => {
-    // Mock支付流程
     setProcessing(true);
-
-    // 模拟支付处理
-    await new Promise(resolve => setTimeout(resolve, 1500));
-
-    // 设置解锁状态
+    await new Promise(resolve => setTimeout(resolve, 1200));
     sessionStorage.setItem('unlocked', 'true');
-
-    // 跳转到完整报告页
     router.push('/report');
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-sm border-b">
-        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
-          <Link href="/preview" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-            <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
-              <span className="text-white font-bold text-lg">志</span>
-            </div>
-            <span className="font-semibold text-lg text-foreground">
-              AI志愿填报助手
-            </span>
+    <div className="min-h-[100dvh] bg-[radial-gradient(circle_at_top,#dbeafe_0,#f8fafc_38%,#ffffff_72%)] text-slate-950">
+      <header className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/85 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
+          <Link href="/preview" className="flex items-center gap-3 hover:opacity-85">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-700 text-sm font-bold text-white">志</div>
+            <span className="font-semibold">AI志愿填报助手</span>
           </Link>
-          <Badge variant="secondary" className="text-xs">
-            解锁完整报告
+          <Badge className="rounded-full bg-blue-50 px-3 py-1 text-blue-700 hover:bg-blue-50">
+            完整避坑方案
           </Badge>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="max-w-xl mx-auto px-4 py-8 pb-24">
-        {/* Title */}
-        <div className="text-center mb-6">
-          <h1 className="text-xl md:text-2xl font-bold mb-2">
-            解锁完整志愿分析报告
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            获取冲稳保完整推荐，数据来源可追溯
-          </p>
-        </div>
-
-        {/* 报告权益 */}
-        <Card className="shadow-sm mb-4">
-          <CardContent className="p-6">
-            <h3 className="font-semibold text-lg mb-4">完整报告包含</h3>
-
-            <div className="space-y-3">
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center flex-shrink-0">
-                  <span className="text-primary text-sm">✓</span>
-                </div>
-                <div>
-                  <p className="font-medium text-sm">冲稳保完整推荐表</p>
-                  <p className="text-xs text-muted-foreground">
-                    包含冲刺、稳妥、保底院校详细列表
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center flex-shrink-0">
-                  <span className="text-primary text-sm">✓</span>
-                </div>
-                <div>
-                  <p className="font-medium text-sm">院校专业详细信息</p>
-                  <p className="text-xs text-muted-foreground">
-                    院校层次、专业类别、录取分数位次
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center flex-shrink-0">
-                  <span className="text-primary text-sm">✓</span>
-                </div>
-                <div>
-                  <p className="font-medium text-sm">数据来源可追溯</p>
-                  <p className="text-xs text-muted-foreground">
-                    每条推荐标注年份、分数、位次、来源
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center flex-shrink-0">
-                  <span className="text-primary text-sm">✓</span>
-                </div>
-                <div>
-                  <p className="font-medium text-sm">详细推荐理由</p>
-                  <p className="text-xs text-muted-foreground">
-                    位次匹配度、专业偏好匹配、风险评估
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center flex-shrink-0">
-                  <span className="text-primary text-sm">✓</span>
-                </div>
-                <div>
-                  <p className="font-medium text-sm">风险评估与建议</p>
-                  <p className="text-xs text-muted-foreground">
-                    每个推荐的风险等级和填报建议
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center flex-shrink-0">
-                  <span className="text-primary text-sm">✓</span>
-                </div>
-                <div>
-                  <p className="font-medium text-sm">完整免责声明</p>
-                  <p className="text-xs text-muted-foreground">
-                    明确告知仅供参考，不构成录取承诺
-                  </p>
-                </div>
-              </div>
+      <main className="mx-auto max-w-5xl px-4 py-8 pb-28 md:py-12">
+        <section className="grid gap-6 md:grid-cols-[1.05fr_0.95fr] md:items-center">
+          <div>
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white px-3 py-1 text-xs font-medium text-blue-700 shadow-sm">
+              <Sparkles className="h-3.5 w-3.5" />
+              预览只显示诊断，完整报告才给可执行方案
             </div>
-          </CardContent>
-        </Card>
-
-        {/* 价格说明 */}
-        <Card className="shadow-sm mb-4 border-2 border-primary/20">
-          <CardContent className="p-6">
-            <div className="text-center mb-4">
-              <div className="inline-flex items-center gap-2 bg-warning/10 px-3 py-1 rounded-full mb-2">
-                <span className="text-xs text-warning font-medium">限时优惠</span>
-              </div>
-              <div className="text-3xl font-bold text-foreground tabular-nums mb-1">
-                ¥99
-              </div>
-              <p className="text-xs text-muted-foreground">
-                原价 ¥199 · MVP测试期特惠
-              </p>
+            <h1 className="text-3xl font-bold leading-tight tracking-tight md:text-5xl">
+              别只看“能不能上”，更要知道
+              <span className="text-blue-700"> 哪些志愿会踩坑</span>
+            </h1>
+            <p className="mt-4 max-w-xl text-base leading-7 text-slate-600">
+              完整报告会把院校、专业、位次差、风险原因和替代方案放在一起，帮你从几十个候选里筛出真正能填、值得填、风险可控的志愿。
+            </p>
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+              <Button
+                size="lg"
+                onClick={handleUnlock}
+                disabled={processing}
+                className="h-12 rounded-full bg-blue-700 px-7 text-base font-semibold text-white shadow-lg shadow-blue-700/20 hover:bg-blue-800"
+              >
+                {processing ? '正在生成完整方案...' : '免费查看完整避坑方案'}
+                {!processing && <ArrowRight className="ml-2 h-4 w-4" />}
+              </Button>
+              <Link href="/preview">
+                <Button size="lg" variant="outline" className="h-12 rounded-full border-slate-300 px-7 text-base">
+                  先返回预览
+                </Button>
+              </Link>
             </div>
-
-            <div className="bg-muted/50 rounded-lg p-4 text-center">
-              <p className="text-xs text-muted-foreground">
-                <span className="font-medium">当前版本：</span>
-                MVP测试版，仅支持浙江/山东
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                后续版本将接入官方数据库和AI深度分析
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* 支付方式 */}
-        <Card className="shadow-sm mb-4">
-          <CardContent className="p-6">
-            <h3 className="font-semibold text-lg mb-4">支付方式</h3>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="p-4 rounded-lg border bg-muted/30 text-center">
-                <div className="text-2xl mb-2">💳</div>
-                <p className="text-sm font-medium">微信支付</p>
-                <p className="text-xs text-muted-foreground">敬请期待</p>
-              </div>
-              <div className="p-4 rounded-lg border bg-muted/30 text-center">
-                <div className="text-2xl mb-2">💰</div>
-                <p className="text-sm font-medium">支付宝</p>
-                <p className="text-xs text-muted-foreground">敬请期待</p>
-              </div>
-            </div>
-
-            <div className="mt-4 p-3 bg-primary/5 rounded-lg border border-primary/10">
-              <p className="text-xs text-foreground">
-                <span className="font-medium">MVP版本：</span>
-                当前为测试阶段，点击下方按钮可免费解锁完整报告查看效果
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* 服务保障 */}
-        <div className="bg-muted/50 rounded-lg p-4 mb-6">
-          <h4 className="font-medium text-sm mb-2">服务保障</h4>
-          <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-            <div className="flex items-center gap-1">
-              <span className="text-success">✓</span>
-              <span>数据真实可靠</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <span className="text-success">✓</span>
-              <span>来源可追溯</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <span className="text-success">✓</span>
-              <span>无AI编造分数</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <span className="text-success">✓</span>
-              <span>明确免责声明</span>
-            </div>
+            <p className="mt-3 text-xs text-slate-500">
+              当前测试期免费开放，先完整体验报告效果。
+            </p>
           </div>
-        </div>
 
-        {/* CTA */}
-        <div className="text-center">
-          <Button
-            size="lg"
-            onClick={handleUnlock}
-            disabled={processing}
-            className="bg-primary hover:bg-primary/90 text-white font-semibold px-8 py-4 rounded-xl shadow-lg"
-          >
-            {processing ? (
-              <span className="flex items-center gap-2">
-                <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
-                处理中...
-              </span>
-            ) : (
-              '免费解锁完整报告'
-            )}
-          </Button>
-          <p className="text-xs text-muted-foreground mt-3">
-            MVP测试期间可免费查看完整报告
-          </p>
-        </div>
+          <Card className="overflow-hidden rounded-[2rem] border-blue-100 bg-white shadow-xl shadow-blue-950/10">
+            <CardContent className="p-0">
+              <div className="border-b bg-slate-950 p-5 text-white">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-blue-100">完整报告预览</p>
+                    <h2 className="mt-1 text-xl font-semibold">志愿风险雷达</h2>
+                  </div>
+                  <LockKeyhole className="h-6 w-6 text-blue-200" />
+                </div>
+              </div>
+              <div className="space-y-4 p-5">
+                <div className="rounded-2xl border border-rose-100 bg-rose-50 p-4">
+                  <div className="flex items-start gap-3">
+                    <TriangleAlert className="mt-0.5 h-5 w-5 text-rose-600" />
+                    <div>
+                      <p className="font-semibold text-rose-950">高风险提醒</p>
+                      <p className="mt-1 text-sm leading-6 text-rose-800">
+                        有些“看起来能冲”的专业，近年位次可能正在收紧，不能只看去年最低分。
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-2xl bg-blue-50 p-3">
+                    <p className="text-2xl font-bold text-blue-700">6+</p>
+                    <p className="text-xs text-slate-600">冲刺候选</p>
+                  </div>
+                  <div className="rounded-2xl bg-emerald-50 p-3">
+                    <p className="text-2xl font-bold text-emerald-700">8+</p>
+                    <p className="text-xs text-slate-600">稳妥候选</p>
+                  </div>
+                  <div className="rounded-2xl bg-amber-50 p-3">
+                    <p className="text-2xl font-bold text-amber-700">6+</p>
+                    <p className="text-xs text-slate-600">保底候选</p>
+                  </div>
+                </div>
+                <div className="rounded-2xl border bg-slate-50 p-4">
+                  <p className="mb-3 text-sm font-semibold">解锁后展示：</p>
+                  <div className="space-y-2">
+                    {lockedItems.map(item => (
+                      <div key={item} className="flex items-center gap-2 text-sm text-slate-700">
+                        <Check className="h-4 w-4 text-blue-700" />
+                        {item}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
 
-        {/* Back Link */}
-        <div className="text-center mt-6">
-          <Link href="/preview" className="text-sm text-primary hover:underline">
-            返回预览页面
-          </Link>
+        <section className="mt-8 grid gap-4 md:grid-cols-4">
+          {reportHighlights.map(item => (
+            <Card key={item.title} className="rounded-3xl border-slate-200 bg-white/90 shadow-sm">
+              <CardContent className="p-5">
+                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
+                  <FileText className="h-5 w-5" />
+                </div>
+                <h3 className="font-semibold">{item.title}</h3>
+                <p className="mt-2 text-sm leading-6 text-slate-600">{item.desc}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </section>
+
+        <section className="mt-8 grid gap-4 md:grid-cols-[0.9fr_1.1fr]">
+          <Card className="rounded-[2rem] border-slate-200 bg-white shadow-sm">
+            <CardContent className="p-6">
+              <h2 className="text-xl font-semibold">为什么完整报告更值？</h2>
+              <div className="mt-5 space-y-4">
+                <div className="rounded-2xl bg-slate-50 p-4">
+                  <p className="text-sm font-medium text-slate-500">普通填报方式</p>
+                  <p className="mt-1 text-sm leading-6 text-slate-700">
+                    家长自己翻投档表，只能看到分数，难判断专业限制、梯度是否安全、哪些学校只是“看起来合适”。
+                  </p>
+                </div>
+                <div className="rounded-2xl bg-blue-50 p-4 ring-1 ring-blue-100">
+                  <p className="text-sm font-medium text-blue-700">完整报告方式</p>
+                  <p className="mt-1 text-sm leading-6 text-slate-800">
+                    系统把位次差、专业匹配、风险等级、来源证据合并到同一张表里，直接告诉你哪些能冲、哪些要避、哪些适合保底。
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-[2rem] border-blue-200 bg-blue-700 text-white shadow-xl shadow-blue-700/20">
+            <CardContent className="p-6">
+              <div className="flex items-start gap-3">
+                <ShieldCheck className="mt-1 h-6 w-6 text-blue-100" />
+                <div>
+                  <h2 className="text-xl font-semibold">测试期权益</h2>
+                  <p className="mt-2 text-sm leading-6 text-blue-50">
+                    现在可以免费查看完整报告，用真实生成结果验证产品价值。后续如果加入人工复核、微信答疑和更多省份数据，再升级服务形态。
+                  </p>
+                </div>
+              </div>
+              <div className="mt-6 rounded-3xl bg-white p-5 text-slate-950">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm text-slate-500">测试期权益</p>
+                    <p className="mt-1 text-2xl font-bold">免费开放完整报告</p>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                      先体验完整冲稳保、避坑诊断和数据证据，确认产品效果。
+                    </p>
+                  </div>
+                  <Badge className="shrink-0 rounded-full bg-emerald-50 text-emerald-700 hover:bg-emerald-50">当前免费</Badge>
+                </div>
+                <Button
+                  size="lg"
+                  onClick={handleUnlock}
+                  disabled={processing}
+                  className="mt-5 h-12 w-full rounded-full bg-blue-700 text-base font-semibold text-white hover:bg-blue-800"
+                >
+                  {processing ? '正在解锁...' : '立即查看完整报告'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
+        <div className="mt-6 rounded-3xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
+          <div className="flex flex-wrap gap-3">
+            <span className="font-medium text-slate-950">服务保障</span>
+            <span>✓ 来源可追溯</span>
+            <span>✓ 不承诺录取</span>
+            <span>✓ 明确风险提示</span>
+            <span>✓ 数据不足会主动提醒</span>
+          </div>
         </div>
       </main>
     </div>

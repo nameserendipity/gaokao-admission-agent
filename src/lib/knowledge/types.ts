@@ -30,6 +30,7 @@ export interface KnowledgeSearchInput {
   preferredMajors: string[];
   excludedMajors: string[];
   limit?: number;
+  balancedYears?: boolean;
 }
 
 export interface KnowledgeSearchResult {

@@ -8,12 +8,15 @@ import type {
   Region,
   Report,
   SubjectCategory,
+  StrategyMode,
   University,
   UserProfile,
 } from '@/lib/types';
 import { getAdmissionsForProfile } from '@/lib/knowledge/admission-source';
+import { getProvinceLabel, getProvinceMeta, isProvince } from '@/lib/provinces';
 import { searchTeacherKnowledge } from '@/lib/knowledge/teacher-knowledge';
 import { generateDeepSeekSummary } from './deepseek';
+import { generateArtSportsReport } from './art-sports-report';
 
 const C = {
   sprint: '\u51b2\u523a',
@@ -28,39 +31,49 @@ const C = {
   economics: '\u7ecf\u6d4e\u5b66',
   education: '\u6559\u80b2\u5b66',
   agriculture: '\u519c\u5b66',
-  zhejiang: '\u6d59\u6c5f',
-  shandong: '\u5c71\u4e1c',
 } as const;
-
-const TOTAL_STUDENTS: Record<Province, number> = { zhejiang: 260000, shandong: 350000 };
-const PROVINCE_LABEL: Record<Province, string> = { zhejiang: C.zhejiang, shandong: C.shandong };
 
 type RecommendationType = string;
 
 export function validateUserProfile(input: unknown): UserProfile {
   if (!input || typeof input !== 'object') throw new Error('Request body is required.');
   const raw = input as Partial<UserProfile>;
-  if (raw.province !== 'zhejiang' && raw.province !== 'shandong') throw new Error('Only Zhejiang and Shandong are supported in MVP.');
+  const candidateType = raw.candidateType === 'art' || raw.candidateType === 'sports' ? raw.candidateType : 'general';
+  if (!isProvince(raw.province)) throw new Error('暂不支持该省份。');
+  const provinceMeta = getProvinceMeta(raw.province);
+  if (provinceMeta.status === 'collecting') throw new Error(`${provinceMeta.label}录取数据仍在补充中，暂不生成正式报告。`);
   if (typeof raw.score !== 'number' || raw.score <= 0 || raw.score > 750) throw new Error('Score must be between 1 and 750.');
   if (raw.rank !== null && raw.rank !== undefined && (typeof raw.rank !== 'number' || raw.rank <= 0)) throw new Error('Rank must be a positive number.');
-  if (!isSubjectCategory(raw.subjectCategory)) throw new Error('Invalid subject category.');
-  if (!isCareerGoal(raw.careerGoal)) throw new Error('Invalid career goal.');
+  if (candidateType !== 'general' && raw.province !== 'jiangxi') throw new Error('当前艺体报告仅支持江西省。');
+  if (candidateType === 'art' && (typeof raw.compositeScore !== 'number' || raw.compositeScore <= 0)) throw new Error('请填写艺术类综合分/投档分。');
+  if (candidateType === 'sports' && (typeof raw.professionalScore !== 'number' || raw.professionalScore <= 0)) throw new Error('请填写体育专业分。');
+  if (candidateType === 'art' && !isNonEmptyString(raw.artSportsCategory)) throw new Error('请选择艺术类专业类别。');
+  if (candidateType === 'general' && !isSubjectCategory(raw.subjectCategory)) throw new Error('Invalid subject category.');
+  if (candidateType === 'general' && !isCareerGoal(raw.careerGoal)) throw new Error('Invalid career goal.');
 
   return {
+    candidateType,
     province: raw.province,
     score: Math.round(raw.score),
     rank: raw.rank ? Math.round(raw.rank) : null,
-    subjectCategory: raw.subjectCategory,
+    professionalScore: typeof raw.professionalScore === 'number' ? raw.professionalScore : null,
+    compositeScore: typeof raw.compositeScore === 'number' ? raw.compositeScore : null,
+    artSportsCategory: isNonEmptyString(raw.artSportsCategory) ? raw.artSportsCategory.trim() : null,
+    subjectCategory: isSubjectCategory(raw.subjectCategory) ? raw.subjectCategory : 'other',
     preferredMajors: Array.isArray(raw.preferredMajors) ? raw.preferredMajors.filter(isNonEmptyString) : [],
     excludedMajors: Array.isArray(raw.excludedMajors) ? raw.excludedMajors.filter(isNonEmptyString) : [],
     preferredRegions: Array.isArray(raw.preferredRegions) ? raw.preferredRegions.filter(isRegion) : [],
     familyBackground: raw.familyBackground === 'well_off' || raw.familyBackground === 'difficult' ? raw.familyBackground : 'ordinary',
-    careerGoal: raw.careerGoal,
+    careerGoal: isCareerGoal(raw.careerGoal) ? raw.careerGoal : 'flexible',
+    strategyMode: isStrategyMode(raw.strategyMode) ? raw.strategyMode : 'safe',
     createdAt: raw.createdAt ? new Date(raw.createdAt) : new Date(),
   };
 }
 
 export async function generateServerReport(userProfile: UserProfile): Promise<Report> {
+  if (userProfile.candidateType === 'art' || userProfile.candidateType === 'sports') {
+    return generateArtSportsReport(userProfile);
+  }
   const rank = userProfile.rank || estimateRankFromScore(userProfile);
   const rankEstimated = !userProfile.rank;
   const sourceResult = await getAdmissionsForProfile({
@@ -74,11 +87,14 @@ export async function generateServerReport(userProfile: UserProfile): Promise<Re
   });
   const admissions = sourceResult.records;
   if (admissions.length === 0) throw new Error('没有可用录取数据，请补充本地知识库或配置 Tavily。');
-  const rankPercentile = (rank / TOTAL_STUDENTS[userProfile.province]) * 100;
+  const rankPercentile = (rank / getProvinceMeta(userProfile.province).totalStudents) * 100;
   const suitableMajors = determineSuitableMajors(userProfile);
   const matchedAdmissions = filterAdmissions(admissions, userProfile, suitableMajors);
-  const recommendations = await generateRecommendations(matchedAdmissions, userProfile, rank);
-  const riskWarnings = [...sourceResult.warnings, ...generateRiskWarnings(userProfile, recommendations, rankEstimated)];
+  const relaxedAdmissions = buildRelaxedAdmissions(admissions, userProfile);
+  const broadAdmissions = buildBroadAdmissions(admissions, userProfile);
+  const recommendationResult = await generateRecommendationsWithFallback(matchedAdmissions, relaxedAdmissions, broadAdmissions, userProfile, rank);
+  const recommendations = recommendationResult.recommendations;
+  const riskWarnings = [...sourceResult.warnings, ...recommendationResult.warnings, ...generateRiskWarnings(userProfile, recommendations, rankEstimated)];
   const teacherKnowledge = searchTeacherKnowledge(userProfile, riskWarnings);
   const strategyInsights = buildStrategyInsights(teacherKnowledge.items);
   const riskDiagnosis = buildRiskDiagnosis(userProfile, recommendations, riskWarnings, rankEstimated);
@@ -114,6 +130,9 @@ function isSubjectCategory(value: unknown): value is SubjectCategory {
 function isCareerGoal(value: unknown): value is CareerGoal {
   return ['employment', 'postgraduate', 'stable', 'flexible'].includes(String(value));
 }
+function isStrategyMode(value: unknown): value is StrategyMode {
+  return ['safe', 'major', 'school', 'city'].includes(String(value));
+}
 function isRegion(value: unknown): value is Region {
   return ['east', 'south', 'north', 'west', 'central', 'northeast'].includes(String(value));
 }
@@ -123,7 +142,7 @@ function isNonEmptyString(value: unknown): value is string {
 
 function estimateRankFromScore(userProfile: UserProfile): number {
   const scoreRatio = userProfile.score / 750;
-  const totalStudents = TOTAL_STUDENTS[userProfile.province];
+  const totalStudents = getProvinceMeta(userProfile.province).totalStudents;
   if (userProfile.province === 'zhejiang') {
     if (scoreRatio > 0.9) return Math.max(1, Math.round(totalStudents * (1 - scoreRatio) * 0.3));
     if (scoreRatio > 0.8) return Math.max(1, Math.round(totalStudents * (1 - scoreRatio) * 0.5));
@@ -215,15 +234,103 @@ function filterAdmissions(admissions: AdmissionRecord[], userProfile: UserProfil
   });
 }
 
+function buildRelaxedAdmissions(admissions: AdmissionRecord[], userProfile: UserProfile): AdmissionRecord[] {
+  const userRank = userProfile.rank || estimateRankFromScore(userProfile);
+  return admissions.filter(record => {
+    const subjectMatch = record.subjectRequirement.some(req => req === userProfile.subjectCategory || req === 'other' || req === 'physics_history' || userProfile.subjectCategory === 'other');
+    const notExcluded = !userProfile.excludedMajors.some(excluded => record.majorName.includes(excluded) || getMajorCategory(record.majorName) === getMajorCategory(excluded));
+    const scoreWindow = record.lowestScore <= 0 || Math.abs(record.lowestScore - userProfile.score) <= 140;
+    const rankWindow = Math.abs(record.lowestRank - userRank) <= 160000 || record.lowestRank > userRank;
+    return subjectMatch && notExcluded && scoreWindow && rankWindow;
+  });
+}
+
+function buildBroadAdmissions(admissions: AdmissionRecord[], userProfile: UserProfile): AdmissionRecord[] {
+  const userRank = userProfile.rank || estimateRankFromScore(userProfile);
+  return admissions.filter(record => {
+    const subjectMatch = record.subjectRequirement.some(req => req === userProfile.subjectCategory || req === 'other' || req === 'physics_history' || userProfile.subjectCategory === 'other');
+    const notExcluded = !userProfile.excludedMajors.some(excluded => record.majorName.includes(excluded) || getMajorCategory(record.majorName) === getMajorCategory(excluded));
+    const scoreWindow = record.lowestScore <= 0 || Math.abs(record.lowestScore - userProfile.score) <= 180;
+    const rankWindow = record.lowestRank <= 0 || Math.abs(record.lowestRank - userRank) <= 240000 || record.lowestRank > userRank;
+    return subjectMatch && notExcluded && scoreWindow && rankWindow;
+  });
+}
+
 async function generateRecommendations(admissions: AdmissionRecord[], userProfile: UserProfile, userRank: number): Promise<Report['recommendations']> {
+  const valid = await buildRecommendationCandidates(admissions, userProfile, userRank);
+  return assembleRecommendations(valid);
+}
+
+type RecommendationResult = { recommendations: Report['recommendations']; warnings: string[] };
+
+async function generateRecommendationsWithFallback(
+  matchedAdmissions: AdmissionRecord[],
+  relaxedAdmissions: AdmissionRecord[],
+  broadAdmissions: AdmissionRecord[],
+  userProfile: UserProfile,
+  userRank: number,
+): Promise<RecommendationResult> {
+  const strictCandidates = await buildRecommendationCandidates(matchedAdmissions, userProfile, userRank);
+  const relaxedCandidates = await buildRecommendationCandidates(relaxedAdmissions, userProfile, userRank);
+  const broadCandidates = await buildRecommendationCandidates(broadAdmissions, userProfile, userRank);
+  const warnings: string[] = [];
+  const merged = [...strictCandidates];
+  const noPreferenceMode = userProfile.preferredMajors.length === 0 && userProfile.preferredRegions.length === 0;
+
+  const addFallback = (type: RecommendationType, minCount: number) => {
+    const current = merged.filter(item => item.recommendationType === type).length;
+    if (current >= minCount) return;
+    const fallbackPool = noPreferenceMode ? [...relaxedCandidates, ...broadCandidates] : relaxedCandidates;
+    const fallback = fallbackPool
+      .filter(item => item.recommendationType === type && !merged.some(existing => sameRecommendation(existing, item)))
+      .slice(0, minCount - current);
+    if (fallback.length > 0) {
+      merged.push(...fallback.map(item => noPreferenceMode ? markBroadRecommendation(item) : markFallbackRecommendation(item)));
+      warnings.push(noPreferenceMode ? `${type}候选数量不足，已按分数/位次优先补充广谱院校。` : `${type}候选数量不足，已放宽专业或地域条件补充相近院校。`);
+    }
+  };
+
+  addFallback(C.stable, noPreferenceMode ? 5 : 3);
+  addFallback(C.guarantee, noPreferenceMode ? 4 : 2);
+  addFallback(C.sprint, noPreferenceMode ? 3 : 2);
+
+  return { recommendations: assembleRecommendations(merged.sort((a, b) => b.matchScore - a.matchScore)), warnings: [...new Set(warnings)] };
+}
+
+async function buildRecommendationCandidates(admissions: AdmissionRecord[], userProfile: UserProfile, userRank: number): Promise<Recommendation[]> {
   const grouped = groupAdmissionHistory(admissions);
   const candidates = await Promise.all([...grouped.values()].map(records => createRecommendation(records, userProfile, userRank)));
-  const valid = candidates.filter((item): item is Recommendation => Boolean(item)).sort((a, b) => b.matchScore - a.matchScore);
+  return candidates.filter((item): item is Recommendation => Boolean(item)).sort((a, b) => b.matchScore - a.matchScore);
+}
+
+function assembleRecommendations(valid: Recommendation[]): Report['recommendations'] {
   return {
     sprint: diversifyRecommendations(valid.filter(item => item.recommendationType === C.sprint), 6),
     stable: diversifyRecommendations(valid.filter(item => item.recommendationType === C.stable), 8),
     guarantee: diversifyRecommendations(valid.filter(item => item.recommendationType === C.guarantee), 6),
     opportunities: diversifyRecommendations(valid.filter(item => item.isOpportunity), 5),
+  };
+}
+
+function sameRecommendation(a: Recommendation, b: Recommendation): boolean {
+  return a.university.name === b.university.name && a.major.name === b.major.name;
+}
+
+function markFallbackRecommendation(item: Recommendation): Recommendation {
+  return {
+    ...item,
+    matchScore: Math.max(1, item.matchScore - 6),
+    reasons: [...item.reasons, '该候选来自放宽条件后的补充匹配，需重点复核专业、地域和招生计划。'],
+    riskNotes: item.riskNotes ? `${item.riskNotes}；该项为补充候选，请谨慎排序。` : '该项为补充候选，建议结合专业接受度、城市和招生章程谨慎判断。',
+  };
+}
+
+function markBroadRecommendation(item: Recommendation): Recommendation {
+  return {
+    ...item,
+    matchScore: Math.max(1, item.matchScore - 2),
+    reasons: [...item.reasons, '你未限定专业或地域，系统按分数、位次和选科优先补充广谱候选。'],
+    riskNotes: item.riskNotes || '该项为广谱匹配候选，建议结合专业接受度、城市、学费和招生计划进一步筛选。',
   };
 }
 
@@ -304,11 +411,34 @@ function calculateMatchScore(record: AdmissionRecord, userProfile: UserProfile, 
   else if (rankDiff < -12000) score -= 18;
   const preferenceScore = calculatePreferenceScore(record, userProfile);
   score += preferenceScore;
-  if (['985', '211', 'double_first_class'].includes(record.universityLevel)) score += 3;
+  const isHighLevelSchool = ['985', '211', 'double_first_class'].includes(record.universityLevel);
+  if (isHighLevelSchool) score += 3;
   if (userProfile.preferredRegions.length > 0 && userProfile.preferredRegions.includes(getRegionByProvince(record.province))) score += 4;
   if (trend > 3000) score += 5;
   if (trend < -3000) score -= 4;
+  score += calculateStrategyAdjustment(record, userProfile, rankDiff, preferenceScore, isHighLevelSchool);
   return Math.max(1, Math.min(100, Math.round(score)));
+}
+function calculateStrategyAdjustment(record: AdmissionRecord, userProfile: UserProfile, rankDiff: number, preferenceScore: number, isHighLevelSchool: boolean): number {
+  const mode = userProfile.strategyMode || 'safe';
+  if (mode === 'safe') {
+    if (rankDiff >= 0 && rankDiff <= 18000) return 7;
+    if (rankDiff < -8000) return -10;
+    return 0;
+  }
+  if (mode === 'major') {
+    return preferenceScore > 0 ? 8 : userProfile.preferredMajors.length > 0 ? -4 : 0;
+  }
+  if (mode === 'school') {
+    if (isHighLevelSchool) return 8;
+    if (record.universityLevel === 'ordinary') return 2;
+    return 0;
+  }
+  if (mode === 'city') {
+    if (userProfile.preferredRegions.length === 0) return 0;
+    return userProfile.preferredRegions.includes(getRegionByProvince(record.province)) ? 10 : -5;
+  }
+  return 0;
 }
 function calculatePreferenceScore(record: AdmissionRecord, userProfile: UserProfile): number {
   if (isDirectPreferenceMatch(record, userProfile)) return 10;
@@ -364,9 +494,18 @@ function generateRecommendationReasons(record: AdmissionRecord, userProfile: Use
   if (trend < 0) reasons.push(`\u8fd1\u5e74\u5f55\u53d6\u6700\u4f4e\u4f4d\u6b21\u6709\u6536\u7d27\u8d8b\u52bf\uff0c\u8f83\u4e0a\u4e00\u5e74\u6536\u7d27\u7ea6${Math.abs(trend)}\u540d`);
   if (isDirectPreferenceMatch(record, userProfile)) reasons.push('\u5339\u914d\u4f60\u7684\u4e13\u4e1a\u504f\u597d');
   else if (isRelatedToPreferences(record, userProfile)) reasons.push('\u5c5e\u4e8e\u4f60\u5173\u6ce8\u65b9\u5411\u7684\u76f8\u8fd1\u4e13\u4e1a\uff0c\u7528\u4e8e\u6269\u5c55\u51b2\u7a33\u4fdd\u9009\u62e9');
+  const strategyReason = getStrategyReason(record, userProfile, rankDiff);
+  if (strategyReason) reasons.push(strategyReason);
   if (isOpportunity) reasons.push('\u5386\u53f2\u4f4d\u6b21\u6ce2\u52a8\u63d0\u4f9b\u4e86\u4e00\u5b9a\u6361\u6f0f\u7a7a\u95f4\uff0c\u4f46\u9700\u8981\u63a7\u5236\u98ce\u9669');
-  reasons.push(`\u6570\u636e\u6765\u6e90\uff1a${record.dataSource}`);
   return reasons;
+}
+function getStrategyReason(record: AdmissionRecord, userProfile: UserProfile, rankDiff: number): string | undefined {
+  const mode = userProfile.strategyMode || 'safe';
+  if (mode === 'safe' && rankDiff >= 0) return '当前策略为稳妥优先，系统优先保留位次安全垫更明确的候选。';
+  if (mode === 'major' && isRelatedToPreferences(record, userProfile)) return '当前策略为专业优先，该候选与专业方向更接近。';
+  if (mode === 'school' && ['985', '211', 'double_first_class'].includes(record.universityLevel)) return '当前策略为学校层次优先，该校层次对排序有加权。';
+  if (mode === 'city' && userProfile.preferredRegions.includes(getRegionByProvince(record.province))) return '当前策略为城市优先，该候选匹配你的地域偏好。';
+  return undefined;
 }
 function generateRiskNotes(rankDiff: number, trend: number, type: RecommendationType): string | undefined {
   if (type === C.sprint) return '\u51b2\u523a\u5fd7\u613f\u5b58\u5728\u4e0d\u786e\u5b9a\u6027\uff0c\u5efa\u8bae\u653e\u5728\u524d\u90e8\u5e76\u642d\u914d\u8db3\u591f\u7a33\u59a5\u548c\u4fdd\u5e95\u5fd7\u613f';
@@ -376,7 +515,9 @@ function generateRiskNotes(rankDiff: number, trend: number, type: Recommendation
 }
 function generateRiskWarnings(userProfile: UserProfile, recommendations: Report['recommendations'], rankEstimated: boolean): string[] {
   const warnings: string[] = [];
+  const provinceMeta = getProvinceMeta(userProfile.province);
   if (rankEstimated) warnings.push('\u5f53\u524d\u4f4d\u6b21\u7531\u5206\u6570\u4f30\u7b97\uff0c\u5efa\u8bae\u586b\u5199\u771f\u5b9e\u4e00\u5206\u4e00\u6bb5\u4f4d\u6b21\u540e\u91cd\u65b0\u751f\u6210');
+  if (provinceMeta.quality !== 'A') warnings.push(`${provinceMeta.label}当前为${provinceMeta.quality}级数据覆盖：本地库覆盖年份为${provinceMeta.years.join('、')}，共${provinceMeta.recordCount}条记录，建议结合考试院和高校官网复核。`);
   if (recommendations.guarantee.length < 2) warnings.push('\u4fdd\u5e95\u5fd7\u613f\u6570\u91cf\u4e0d\u8db3\uff0c\u5efa\u8bae\u81f3\u5c11\u4fdd\u75592\u4e2a\u66f4\u5b89\u5168\u7684\u4fdd\u5e95\u9009\u62e9');
   if (recommendations.sprint.length > recommendations.stable.length + recommendations.guarantee.length) warnings.push('\u51b2\u523a\u5fd7\u613f\u5360\u6bd4\u504f\u9ad8\uff0c\u5efa\u8bae\u964d\u4f4e\u6574\u4f53\u98ce\u9669');
   if (userProfile.preferredMajors.length > 0 && userProfile.preferredMajors.length < 3) warnings.push('\u4e13\u4e1a\u504f\u597d\u8f83\u7a84\uff0c\u53ef\u80fd\u51cf\u5c11\u53ef\u9009\u9662\u6821\u8303\u56f4');
@@ -409,7 +550,7 @@ function collectDataSources(records: AdmissionRecord[]): Report['dataSources'] {
 }
 function generatePositionDescription(rankPercentile: number, province: Province, rankEstimated: boolean): string {
   const prefix = rankEstimated ? '\u6309\u5206\u6570\u4f30\u7b97\uff1a' : '';
-  const provinceName = PROVINCE_LABEL[province];
+  const provinceName = getProvinceLabel(province);
   if (rankPercentile < 5) return `${prefix}\u5728${provinceName}\u7ea6\u5904\u4e8e\u524d${rankPercentile.toFixed(1)}%\uff0c\u53ef\u91cd\u70b9\u5173\u6ce8\u9ad8\u5c42\u6b21\u9662\u6821\u7684\u51b2\u7a33\u7ec4\u5408\u3002`;
   if (rankPercentile < 15) return `${prefix}\u5728${provinceName}\u7ea6\u5904\u4e8e\u524d${rankPercentile.toFixed(1)}%\uff0c\u5efa\u8bae\u517c\u987e\u4f18\u8d28\u9662\u6821\u548c\u4e13\u4e1a\u5339\u914d\u3002`;
   if (rankPercentile < 30) return `${prefix}\u5728${provinceName}\u5904\u4e8e\u4e2d\u4e0a\u533a\u95f4\uff0c\u9002\u5408\u7528\u51b2\u523a\u3001\u7a33\u59a5\u3001\u4fdd\u5e95\u5f62\u6210\u68af\u5ea6\u3002`;
@@ -417,8 +558,7 @@ function generatePositionDescription(rankPercentile: number, province: Province,
   return `${prefix}\u5728${provinceName}\u7ade\u4e89\u538b\u529b\u8f83\u9ad8\uff0c\u5e94\u91cd\u70b9\u63a7\u5236\u98ce\u9669\u5e76\u6269\u5927\u9662\u6821\u4e13\u4e1a\u8303\u56f4\u3002`;
 }
 function getRegionByProvince(province: Province): Region {
-  const regionMap: Record<Province, Region> = { zhejiang: 'east', shandong: 'east' };
-  return regionMap[province];
+  return getProvinceMeta(province).region;
 }
 function fallbackUniversity(record: AdmissionRecord): University {
   return { code: record.universityCode, name: record.universityName, province: record.province, city: '\u5f85\u8865\u5145', level: record.universityLevel, type: inferUniversityType(record.universityName, record.majorCategory) };
@@ -435,4 +575,3 @@ function inferUniversityType(_schoolName: string, majorCategory: string): Univer
   if (majorCategory === C.engineering) return 'engineering';
   return 'comprehensive';
 }
-

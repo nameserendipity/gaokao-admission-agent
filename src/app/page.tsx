@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { SELECTABLE_PROVINCES } from '@/lib/provinces';
 
 export default function Home() {
   return (
@@ -20,7 +21,7 @@ export default function Home() {
             专业 · 可信 · 清爽
           </span>
         </div>
-      </header>
+      <div className="max-w-4xl mx-auto px-4 pb-3 text-right"><Link href="/data-disclaimer" className="text-sm text-muted-foreground hover:text-foreground">????</Link></div></header>
 
       {/* Hero Section */}
       <main className="max-w-4xl mx-auto px-4 py-8 md:py-12">
@@ -112,16 +113,16 @@ export default function Home() {
           <div className="flex flex-col md:flex-row items-center justify-center gap-4 md:gap-8 text-center">
             <div>
               <div className="text-2xl md:text-3xl font-bold text-foreground tabular-nums">
-                2
+                {SELECTABLE_PROVINCES.length}
               </div>
               <div className="text-xs md:text-sm text-muted-foreground">
-                支持省份（浙江/山东）
+                正式开放省份
               </div>
             </div>
             <div className="hidden md:block w-px h-8 bg-border" />
             <div>
               <div className="text-2xl md:text-3xl font-bold text-foreground tabular-nums">
-                2024
+                2023-2025
               </div>
               <div className="text-xs md:text-sm text-muted-foreground">
                 最新录取数据年份
@@ -166,10 +167,10 @@ export default function Home() {
         <div className="mt-6 bg-blue-50 border border-primary/20 rounded-lg p-4 text-center">
           <p className="text-sm text-foreground">
             <span className="font-semibold">当前版本支持：</span>
-            浙江省、山东省普通类考生
+            {SELECTABLE_PROVINCES.map(province => province.shortName).join('、')}普通类考生
           </p>
           <p className="text-xs text-muted-foreground mt-1">
-            后续将陆续开放更多省份，敬请期待
+            河北/山东/浙江/重庆/黑龙江正式开放；湖北/江苏/北京为数据试用省份
           </p>
         </div>
       </main>

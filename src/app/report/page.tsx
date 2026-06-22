@@ -10,6 +10,8 @@ import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import type { Recommendation, Report, ReportChatMessage, ReportPreviewResponse } from '@/lib/types';
+import { getProvinceLabel } from '@/lib/provinces';
+import { cn } from '@/lib/utils';
 
 const subjectLabel: Record<string, string> = {
   physics_chemistry: '物理 / 化学',
@@ -107,6 +109,10 @@ export default function ReportPage() {
     router.push('/input');
   };
 
+  const handlePrint = () => {
+    window.print();
+  };
+
 
   if (!report && !error) {
     return (
@@ -134,8 +140,15 @@ export default function ReportPage() {
   }
 
   if (!report) return null;
-  const provinceName = report.userProfile.province === 'zhejiang' ? '浙江' : '山东';
+  const provinceName = getProvinceLabel(report.userProfile.province);
+  const isArtSportsReport = report.userProfile.candidateType === 'art' || report.userProfile.candidateType === 'sports';
   const topRisk = report.riskDiagnosis?.find(item => item.level === 'high') || report.riskDiagnosis?.[0];
+  const noPreferenceMode = report.userProfile.preferredMajors.length === 0 && report.userProfile.preferredRegions.length === 0;
+  const hasMajorGroupRecommendations = allRecommendations.some(item => item.major.name === '院校专业组' || item.admissionRecord.notes?.includes('原始专业组信息'));
+  const recommendationNotices = [
+    noPreferenceMode ? '你没有限定专业或地域，系统已按分数、位次和选科做广谱匹配；后续建议再结合城市、学费和专业接受度做二次筛选。' : null,
+    hasMajorGroupRecommendations ? '部分省份按院校专业组公布投档线。报告中的“院校专业组”代表该组投档结果，组内具体专业需以招生计划和高校招生章程复核。' : null,
+  ].filter((item): item is string => Boolean(item));
 
   return (
     <div className="min-h-[100dvh] bg-[#f6f8fb] text-slate-950">
@@ -153,12 +166,13 @@ export default function ReportPage() {
         <section className="mb-6 rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm md:p-8">
           <div className="grid gap-8 lg:grid-cols-[1.35fr_.65fr] lg:items-end">
             <div>
-              <div className="mb-4 flex flex-wrap items-center gap-2"><Badge variant="outline" className="rounded-full border-blue-200 bg-blue-50 text-blue-700">{provinceName}</Badge><Badge variant="outline" className="rounded-full">{subjectLabel[report.userProfile.subjectCategory] || report.userProfile.subjectCategory}</Badge><Badge variant="outline" className="rounded-full">报告ID {report.id.slice(-10)}</Badge></div>
-              <h1 className="max-w-3xl text-3xl font-semibold tracking-tight text-slate-950 md:text-5xl">完整志愿推荐报告</h1>
+              <div className="mb-4 flex flex-wrap items-center gap-2"><Badge variant="outline" className="rounded-full border-blue-200 bg-blue-50 text-blue-700">{provinceName}</Badge><Badge variant="outline" className="rounded-full">{report.userProfile.candidateType === 'art' ? '艺术类' : report.userProfile.candidateType === 'sports' ? '体育类' : subjectLabel[report.userProfile.subjectCategory] || report.userProfile.subjectCategory}</Badge>{report.userProfile.artSportsCategory && <Badge variant="outline" className="rounded-full">{report.userProfile.artSportsCategory}</Badge>}<Badge variant="outline" className="rounded-full">报告ID {report.id.slice(-10)}</Badge></div>
+              <h1 className="max-w-3xl text-3xl font-semibold tracking-tight text-slate-950 md:text-5xl">{report.userProfile.candidateType === 'art' || report.userProfile.candidateType === 'sports' ? '艺体志愿推荐报告' : '完整志愿推荐报告'}</h1>
               <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">{report.positionAnalysis.positionDescription}</p>
-              <div className="mt-5 flex flex-wrap gap-3">
+              <div className="mt-5 flex flex-wrap gap-3 print:hidden">
                 <Button onClick={handleRestart} variant="outline" className="rounded-full border-slate-200 bg-white">{'\u4fe1\u606f\u586b\u9519\u4e86\uff0c\u91cd\u65b0\u751f\u6210'}</Button>
                 <Button onClick={() => router.push('/preview')} variant="ghost" className="rounded-full text-slate-600">{'\u8fd4\u56de\u9884\u89c8'}</Button>
+                <Button onClick={handlePrint} className="rounded-full bg-blue-700 px-5 text-white hover:bg-blue-800">{'\u6253\u5370 / \u4fdd\u5b58PDF'}</Button>
               </div>
             </div>
             <div className="grid grid-cols-3 gap-3 rounded-3xl bg-slate-50 p-3"><Metric label="分数" value={String(report.userProfile.score)} /><Metric label="位次" value={String(report.positionAnalysis.rank)} /><Metric label="推荐" value={String(allRecommendations.length)} /></div>
@@ -170,8 +184,30 @@ export default function ReportPage() {
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
           <div className="space-y-6">
             {report.aiSummary && <Card className="rounded-[1.5rem] border-slate-200 shadow-sm"><CardContent className="p-6 md:p-7"><SectionTitle title="智能总判断" subtitle="结合录取数据库与方法论知识库生成" /><div className="mt-5 whitespace-pre-wrap rounded-2xl bg-slate-50 p-5 text-sm leading-7 text-slate-700">{report.aiSummary}</div></CardContent></Card>}
-            <Card className="rounded-[1.5rem] border-slate-200 shadow-sm"><CardContent className="p-6 md:p-7"><SectionTitle title="冲稳保推荐" subtitle="按位次差、趋势和专业匹配度分层" /><div className="mt-6 space-y-8"><RecommendationSection title="冲刺" description="争取上限，风险最高" tone="blue" items={report.recommendations.sprint} /><RecommendationSection title="稳妥" description="主体选择，优先保证匹配" tone="emerald" items={report.recommendations.stable} /><RecommendationSection title="保底" description="防止滑档，必须可接受" tone="amber" items={report.recommendations.guarantee} /></div></CardContent></Card>
-            <Card className="rounded-[1.5rem] border-slate-200 shadow-sm"><CardContent className="p-6 md:p-7"><SectionTitle title="报告追问 Agent" subtitle="继续问哪个更稳、是否值得冲、专业风险是什么" /><div className="mt-5 max-h-96 space-y-3 overflow-auto rounded-2xl bg-slate-50 p-4">{messages.length === 0 && <p className="text-sm text-slate-500">可以问：哪几个志愿最稳？计算机要不要换成电子信息？保底还缺不缺？</p>}{messages.map(message => <div key={message.id} className={message.role === 'user' ? 'ml-auto max-w-[85%] rounded-2xl bg-blue-700 p-3 text-white' : 'max-w-[85%] rounded-2xl bg-white p-3 text-slate-700 shadow-sm'}><p className="mb-1 text-xs opacity-70">{message.role === 'user' ? '你' : 'Agent'}</p><p className="whitespace-pre-wrap text-sm leading-6">{message.content}</p></div>)}</div><div className="mt-4"><Textarea value={question} onChange={event => setQuestion(event.target.value)} placeholder="例如：我更想保专业，应该删掉哪些冲刺？" className="min-h-24 rounded-2xl border-slate-200 bg-white" /><Button onClick={handleAsk} disabled={chatLoading || !question.trim()} className="mt-3 rounded-full bg-blue-700 px-5 text-white hover:bg-blue-800">{chatLoading ? '分析中...' : '提交追问'}</Button></div></CardContent></Card>
+            <Card className="rounded-[1.5rem] border-slate-200 shadow-sm">
+              <CardContent className="p-6 md:p-7">
+                <SectionTitle
+                  title={isArtSportsReport ? '\u9662\u6821\u4e13\u4e1a\u7ec4\u51b2\u7a33\u4fdd\u63a8\u8350' : '\u51b2\u7a33\u4fdd\u63a8\u8350'}
+                  subtitle={isArtSportsReport ? '\u6309\u827a\u4f53\u7c7b\u522b\u3001\u6295\u6863\u7efc\u5408\u5206\u548c\u6295\u6863\u6392\u540d\u5206\u5c42\uff1b\u5177\u4f53\u7ec4\u5185\u4e13\u4e1a\u9700\u67e5\u62db\u751f\u8ba1\u5212' : '\u6309\u4f4d\u6b21\u5dee\u3001\u8d8b\u52bf\u548c\u4e13\u4e1a\u5339\u914d\u5ea6\u5206\u5c42'}
+                />
+                {recommendationNotices.length > 0 && (
+                  <div className="mt-5 grid gap-3">
+                    {recommendationNotices.map(notice => (
+                      <Alert key={notice} className="border-blue-100 bg-blue-50/70 text-blue-950">
+                        <AlertTitle className="text-sm">{'\u63a8\u8350\u53e3\u5f84\u63d0\u793a'}</AlertTitle>
+                        <AlertDescription className="text-sm leading-6">{notice}</AlertDescription>
+                      </Alert>
+                    ))}
+                  </div>
+                )}
+                <div className="mt-6 space-y-8">
+                  <RecommendationSection title={'\u51b2\u523a'} description={'\u4e89\u53d6\u4e0a\u9650\uff0c\u98ce\u9669\u6700\u9ad8'} tone="blue" items={report.recommendations.sprint} />
+                  <RecommendationSection title={'\u7a33\u59a5'} description={'\u4e3b\u4f53\u9009\u62e9\uff0c\u4f18\u5148\u4fdd\u8bc1\u5339\u914d'} tone="emerald" items={report.recommendations.stable} />
+                  <RecommendationSection title={'\u4fdd\u5e95'} description={'\u9632\u6b62\u6ed1\u6863\uff0c\u5fc5\u987b\u53ef\u63a5\u53d7'} tone="amber" items={report.recommendations.guarantee} />
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="rounded-[1.5rem] border-slate-200 shadow-sm print:hidden"><CardContent className="p-6 md:p-7"><SectionTitle title="报告追问 Agent" subtitle="继续问哪个更稳、是否值得冲、专业风险是什么" /><div className="mt-5 max-h-96 space-y-3 overflow-auto rounded-2xl bg-slate-50 p-4">{messages.length === 0 && <p className="text-sm text-slate-500">可以问：哪几个志愿最稳？计算机要不要换成电子信息？保底还缺不缺？</p>}{messages.map(message => <div key={message.id} className={message.role === 'user' ? 'ml-auto max-w-[85%] rounded-2xl bg-blue-700 p-3 text-white' : 'max-w-[85%] rounded-2xl bg-white p-3 text-slate-700 shadow-sm'}><p className="mb-1 text-xs opacity-70">{message.role === 'user' ? '你' : 'Agent'}</p><p className="whitespace-pre-wrap text-sm leading-6">{message.content}</p></div>)}</div><div className="mt-4"><Textarea value={question} onChange={event => setQuestion(event.target.value)} placeholder="例如：我更想保专业，应该删掉哪些冲刺？" className="min-h-24 rounded-2xl border-slate-200 bg-white" /><Button onClick={handleAsk} disabled={chatLoading || !question.trim()} className="mt-3 rounded-full bg-blue-700 px-5 text-white hover:bg-blue-800">{chatLoading ? '分析中...' : '提交追问'}</Button></div></CardContent></Card>
           </div>
           <aside className="space-y-6 lg:sticky lg:top-24 lg:self-start"><Card className="rounded-[1.5rem] border-slate-200 shadow-sm"><CardContent className="p-6"><SectionTitle title="风险诊断" subtitle={topRisk ? topRisk.message : '当前未发现高风险项'} compact /><div className="mt-5 space-y-3">{(report.riskDiagnosis || []).length === 0 && <p className="text-sm text-slate-500">暂无额外风险诊断。</p>}{(report.riskDiagnosis || []).map((risk, index) => <div key={`${risk.type}-${index}`} className={`rounded-2xl border p-4 ${riskTone[risk.level]}`}><div className="mb-2 flex items-center justify-between gap-3"><span className="text-sm font-semibold">{risk.message}</span><span className="rounded-full bg-white/70 px-2 py-0.5 text-xs">{risk.level}</span></div><p className="text-sm leading-6 opacity-90">{risk.suggestion}</p></div>)}</div></CardContent></Card><Card className="rounded-[1.5rem] border-slate-200 shadow-sm"><CardContent className="p-6"><SectionTitle title="策略依据" subtitle="来自项目内老师方法论知识库" compact /><div className="mt-5 space-y-3">{(report.strategyInsights || []).map(item => <div key={`${item.category}-${item.title}`} className="rounded-2xl border border-slate-200 bg-white p-4"><div className="mb-2 flex items-center gap-2"><Badge variant="secondary" className="rounded-full">{item.category}</Badge><p className="text-sm font-semibold">{item.title}</p></div><p className="text-xs leading-5 text-slate-500">{item.summary}</p></div>)}</div></CardContent></Card><Card className="rounded-[1.5rem] border-slate-200 shadow-sm"><CardContent className="p-6"><SectionTitle title="数据来源" subtitle="所有录取数据都可回溯" compact /><div className="mt-5 space-y-3">{report.dataSources.map((source, idx) => <div key={`${source.name}-${source.year}-${idx}`} className="rounded-2xl bg-slate-50 p-4"><p className="text-sm font-medium text-slate-800">{source.name}</p><p className="mt-1 text-xs text-slate-500">{source.year}年录取数据{source.collectedAt ? ` · ${new Date(source.collectedAt).toLocaleDateString('zh-CN')}` : ''}</p>{source.url && <Link href={source.url} target="_blank" className="mt-2 inline-block text-xs font-medium text-blue-700 hover:underline">查看来源</Link>}</div>)}</div></CardContent></Card></aside>
         </div>
@@ -181,7 +217,100 @@ export default function ReportPage() {
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) { return <div className="rounded-2xl bg-white p-4 text-center shadow-sm"><p className="text-xs text-slate-500">{label}</p><p className="mt-1 text-xl font-semibold tracking-tight text-slate-950">{value}</p></div>; }
-function SectionTitle({ title, subtitle, compact = false }: { title: string; subtitle: string; compact?: boolean }) { return <div><h2 className={compact ? 'text-lg font-semibold tracking-tight' : 'text-xl font-semibold tracking-tight md:text-2xl'}>{title}</h2><p className="mt-1 text-sm leading-6 text-slate-500">{subtitle}</p></div>; }
-function RecommendationSection({ title, description, tone, items }: { title: string; description: string; tone: 'blue' | 'emerald' | 'amber'; items: Recommendation[] }) { const toneClass = tone === 'blue' ? 'bg-blue-50 text-blue-700 border-blue-200' : tone === 'emerald' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'; return <section><div className="mb-3 flex items-center justify-between gap-4"><div className="flex items-center gap-3"><Badge variant="outline" className={`rounded-full ${toneClass}`}>{title}</Badge><p className="text-sm text-slate-500">{description}</p></div><span className="text-xs text-slate-400">{items.length} 个</span></div>{items.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">暂无{title}推荐。建议扩大专业、地域或位次窗口后重新生成。</div> : <div className="grid gap-3">{items.map((rec, idx) => <RecommendationCard key={`${rec.university.code}-${rec.major.name}-${idx}`} rec={rec} />)}</div>}</section>; }
-function RecommendationCard({ rec }: { rec: Recommendation }) { return <div className="rounded-2xl border border-slate-200 bg-white p-4 transition-colors hover:border-blue-200 hover:bg-blue-50/30"><div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between"><div><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold text-slate-950">{rec.university.name}</h3><Badge variant="outline" className="rounded-full text-xs">{rec.university.level === 'double_first_class' ? '双一流' : rec.university.level}</Badge>{rec.isOpportunity && <Badge className="rounded-full bg-blue-700 text-xs text-white">捡漏候选</Badge>}</div><p className="mt-2 text-sm text-slate-700">{rec.major.name}{' \u00b7 '}{rec.major.category}</p><div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500"><span>{rec.admissionRecord.year}年</span><span>最低分 {rec.admissionRecord.lowestScore}</span><span>最低位次 {rec.admissionRecord.lowestRank}</span><span>位次差 {rec.rankDiff ?? '-'}</span><span>参考概率 {rec.admissionChance ?? '-'}%</span></div></div><div className="rounded-2xl bg-slate-50 px-4 py-3 text-right"><p className="text-xs text-slate-500">匹配分</p><p className="text-2xl font-semibold text-slate-950">{rec.matchScore}</p></div></div><Separator className="my-4" /><div className="grid gap-4 md:grid-cols-2"><div><p className="mb-2 text-xs font-medium text-slate-500">推荐理由</p><div className="space-y-1.5">{rec.reasons.slice(0, 3).map((reason, index) => <p key={index} className="text-sm leading-6 text-slate-700">{reason}</p>)}</div></div><div><p className="mb-2 text-xs font-medium text-slate-500">数据证据</p><div className="space-y-1.5">{(rec.evidence || []).slice(0, 2).map(item => <p key={`${item.year}-${item.lowestRank}`} className="text-xs leading-5 text-slate-500">{item.year}年{' · '}{item.lowestScore}分{' · '}{item.lowestRank}位{' · '}{item.sourceName}</p>)}</div></div></div>{rec.riskNotes && <p className="mt-3 rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-800">{rec.riskNotes}</p>}</div>; }
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl bg-white p-4 text-center shadow-sm">
+      <p className="text-xs text-slate-500">{label}</p>
+      <p className="mt-1 text-xl font-semibold tracking-tight text-slate-950">{value}</p>
+    </div>
+  );
+}
+
+function SectionTitle({ title, subtitle, compact = false }: { title: string; subtitle: string; compact?: boolean }) {
+  return (
+    <div>
+      <h2 className={compact ? 'text-lg font-semibold tracking-tight' : 'text-xl font-semibold tracking-tight md:text-2xl'}>{title}</h2>
+      <p className="mt-1 text-sm leading-6 text-slate-500">{subtitle}</p>
+    </div>
+  );
+}
+
+function RecommendationSection({ title, description, tone, items }: { title: string; description: string; tone: 'blue' | 'emerald' | 'amber'; items: Recommendation[] }) {
+  const toneClass = tone === 'blue' ? 'bg-blue-50 text-blue-700 border-blue-200' : tone === 'emerald' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200';
+  return (
+    <section>
+      <div className="mb-3 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <Badge variant="outline" className={cn('rounded-full', toneClass)}>{title}</Badge>
+          <p className="text-sm text-slate-500">{description}</p>
+        </div>
+        <span className="text-xs text-slate-400">{items.length} {'\u4e2a'}</span>
+      </div>
+      {items.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">{'\u6682\u65e0'}{title}{'\u63a8\u8350\u3002\u5efa\u8bae\u6269\u5927\u4e13\u4e1a\u3001\u5730\u57df\u6216\u4f4d\u6b21\u7a97\u53e3\u540e\u91cd\u65b0\u751f\u6210\u3002'}</div>
+      ) : (
+        <div className="grid gap-3">{items.map((rec, idx) => <RecommendationCard key={`${rec.university.code}-${rec.major.name}-${idx}`} rec={rec} />)}</div>
+      )}
+    </section>
+  );
+}
+
+function RecommendationCard({ rec }: { rec: Recommendation }) {
+  const isArtSports = rec.admissionRecord.id.startsWith('art-sports-');
+  const rawGroupInfo = extractRawGroupInfo(rec.admissionRecord.notes);
+  const visibleNotes = stripRawGroupInfo(rec.admissionRecord.notes);
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 transition-colors hover:border-blue-200 hover:bg-blue-50/30">
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="font-semibold text-slate-950">{rec.university.name}</h3>
+            <Badge variant="outline" className="rounded-full text-xs">{isArtSports ? '\u827a\u4f53\u672c\u79d1\u6279' : rec.university.level === 'double_first_class' ? '\u53cc\u4e00\u6d41' : rec.university.level}</Badge>
+            {rec.major.name === '\u9662\u6821\u4e13\u4e1a\u7ec4' && <Badge variant="secondary" className="rounded-full text-xs">{'\u9700\u67e5\u7ec4\u5185\u4e13\u4e1a'}</Badge>}
+            {rec.isOpportunity && <Badge className="rounded-full bg-blue-700 text-xs text-white">{'\u6361\u6f0f\u5019\u9009'}</Badge>}
+          </div>
+          <p className="mt-2 text-sm text-slate-700">{rec.major.name}{' \u00b7 '}{rec.major.category}</p>
+          <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
+            <span>{rec.admissionRecord.year}{'\u5e74'}</span>
+            <span>{isArtSports ? '\u6295\u6863\u7efc\u5408\u5206' : '\u6700\u4f4e\u5206'} {rec.admissionRecord.lowestScore}</span>
+            <span>{isArtSports ? '\u6295\u6863\u6392\u540d' : '\u6700\u4f4e\u4f4d\u6b21'} {rec.admissionRecord.lowestRank || '-'}</span>
+            {!isArtSports && <span>{'\u4f4d\u6b21\u5dee'} {rec.rankDiff ?? '-'}</span>}
+            <span>{'\u53c2\u8003\u6982\u7387'} {rec.admissionChance ?? '-'}%</span>
+            {isArtSports && visibleNotes && <span>{visibleNotes}</span>}
+          </div>
+        </div>
+        <div className="rounded-2xl bg-slate-50 px-4 py-3 text-right">
+          <p className="text-xs text-slate-500">{'\u5339\u914d\u5206'}</p>
+          <p className="text-2xl font-semibold text-slate-950">{rec.matchScore}</p>
+        </div>
+      </div>
+      <Separator className="my-4" />
+      <div className="grid gap-4 md:grid-cols-2">
+        <div>
+          <p className="mb-2 text-xs font-medium text-slate-500">{'\u63a8\u8350\u7406\u7531'}</p>
+          <div className="space-y-1.5">{rec.reasons.slice(0, 3).map((reason, index) => <p key={index} className="text-sm leading-6 text-slate-700">{reason}</p>)}</div>
+        </div>
+        <div>
+          <p className="mb-2 text-xs font-medium text-slate-500">{'\u6570\u636e\u8bc1\u636e'}</p>
+          <div className="space-y-1.5">
+            {(rec.evidence || []).slice(0, 2).map(item => <p key={`${item.year}-${item.lowestRank}`} className="text-xs leading-5 text-slate-500">{item.year}{'\u5e74 \u00b7 '}{item.lowestScore}{'\u5206 \u00b7 '}{item.lowestRank || '-'}{'\u4f4d \u00b7 '}{item.sourceName}</p>)}
+            {rawGroupInfo && <p className="text-xs leading-5 text-slate-500">{'\u539f\u59cb\u4e13\u4e1a\u7ec4\uff1a'}{rawGroupInfo}</p>}
+          </div>
+        </div>
+      </div>
+      {rec.major.name === '\u9662\u6821\u4e13\u4e1a\u7ec4' && <p className="mt-3 rounded-xl bg-blue-50 p-3 text-xs leading-5 text-blue-800">{'\u8be5\u6761\u4e3a\u9662\u6821\u4e13\u4e1a\u7ec4\u6295\u6863\u7ebf\uff0c\u4e0d\u80fd\u76f4\u63a5\u7b49\u540c\u4e8e\u67d0\u4e00\u4e2a\u5177\u4f53\u4e13\u4e1a\u3002\u6b63\u5f0f\u586b\u62a5\u524d\u8bf7\u6838\u5bf9\u62db\u751f\u8ba1\u5212\u4e2d\u7684\u7ec4\u5185\u4e13\u4e1a\u3001\u9009\u79d1\u8981\u6c42\u548c\u6821\u533a\u3002'}</p>}
+      {rec.riskNotes && <p className="mt-3 rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-800">{rec.riskNotes}</p>}
+    </div>
+  );
+}
+
+function extractRawGroupInfo(notes?: string): string | undefined {
+  return notes?.split('\uFF1B').find(item => item.startsWith('\u539f\u59cb\u4e13\u4e1a\u7ec4\u4fe1\u606f\uFF1A'))?.replace('\u539f\u59cb\u4e13\u4e1a\u7ec4\u4fe1\u606f\uFF1A', '').trim();
+}
+
+function stripRawGroupInfo(notes?: string): string | undefined {
+  const visible = notes?.split('\uFF1B').filter(item => !item.startsWith('\u539f\u59cb\u4e13\u4e1a\u7ec4\u4fe1\u606f\uFF1A')).join('\uFF1B').trim();
+  return visible || undefined;
+}
+

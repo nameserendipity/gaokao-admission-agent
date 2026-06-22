@@ -59,9 +59,9 @@ async function searchBalancedAdmissionKnowledge(input: KnowledgeSearchInput) {
     seen.add(key);
     return true;
   });
-  return {
-    records,
-    source: 'sqlite' as const,
-    warnings: results.flatMap(result => result.warnings),
+    return {
+      records,
+      source: 'sqlite' as const,
+    warnings: [...new Set(results.flatMap(result => result.warnings))],
   };
 }

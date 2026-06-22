@@ -1,5 +1,36 @@
 
-export type Province = 'zhejiang' | 'shandong';
+export type Province =
+  | 'beijing'
+  | 'tianjin'
+  | 'hebei'
+  | 'shanxi'
+  | 'inner_mongolia'
+  | 'liaoning'
+  | 'jilin'
+  | 'heilongjiang'
+  | 'shanghai'
+  | 'jiangsu'
+  | 'zhejiang'
+  | 'anhui'
+  | 'fujian'
+  | 'jiangxi'
+  | 'shandong'
+  | 'henan'
+  | 'hubei'
+  | 'hunan'
+  | 'guangdong'
+  | 'guangxi'
+  | 'hainan'
+  | 'chongqing'
+  | 'sichuan'
+  | 'guizhou'
+  | 'yunnan'
+  | 'xizang'
+  | 'shaanxi'
+  | 'gansu'
+  | 'qinghai'
+  | 'ningxia'
+  | 'xinjiang';
 
 export type SubjectCategory =
   | 'physics_chemistry'
@@ -11,17 +42,24 @@ export type SubjectCategory =
 export type Region = 'east' | 'south' | 'north' | 'west' | 'central' | 'northeast';
 export type FamilyBackground = 'ordinary' | 'well_off' | 'difficult';
 export type CareerGoal = 'employment' | 'postgraduate' | 'stable' | 'flexible';
+export type CandidateType = 'general' | 'art' | 'sports';
+export type StrategyMode = 'safe' | 'major' | 'school' | 'city';
 
 export interface UserProfile {
+  candidateType?: CandidateType;
   province: Province;
   score: number;
   rank: number | null;
+  professionalScore?: number | null;
+  compositeScore?: number | null;
+  artSportsCategory?: string | null;
   subjectCategory: SubjectCategory;
   preferredMajors: string[];
   excludedMajors: string[];
   preferredRegions: Region[];
   familyBackground: FamilyBackground;
   careerGoal: CareerGoal;
+  strategyMode?: StrategyMode;
   createdAt: Date;
 }
 

@@ -8,6 +8,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import type { Report, ReportPreviewResponse, UserProfile } from '@/lib/types';
+import { getProvinceLabel } from '@/lib/provinces';
 
 export default function PreviewPage() {
   const router = useRouter();
@@ -49,9 +50,11 @@ export default function PreviewPage() {
   if (error) return <div className="min-h-[100dvh] bg-slate-50"><main className="mx-auto max-w-xl px-4 py-10"><Alert variant="destructive"><AlertTitle>生成失败</AlertTitle><AlertDescription>{error}</AlertDescription></Alert><Button className="mt-6" onClick={() => router.push('/input')}>返回重新填写</Button></main></div>;
   if (!report) return null;
 
-  const provinceName = report.userProfile.province === 'zhejiang' ? '浙江' : '山东';
+  const provinceName = getProvinceLabel(report.userProfile.province);
+  const isArtSports = report.userProfile.candidateType === 'art' || report.userProfile.candidateType === 'sports';
   const topStable = report.recommendations.stable[0];
   const topOpportunity = report.recommendations.opportunities?.[0];
+  const visibleRiskWarnings = report.riskWarnings.filter(warning => !warning.includes('???')).slice(0, 3);
 
   return (
     <div className="min-h-[100dvh] bg-[#f6f8fb] text-slate-950">
@@ -65,7 +68,7 @@ export default function PreviewPage() {
         <div className="mb-6 text-center"><h1 className="text-2xl font-semibold tracking-tight">智能报告预览</h1><p className="mt-2 text-sm text-slate-500">{provinceName}考生 {report.userProfile.score}分 / 位次{report.positionAnalysis.rank}</p></div>
         <Card className="mb-4 rounded-3xl border-slate-200 shadow-sm"><CardContent className="p-6"><h3 className="mb-3 text-lg font-semibold">位次定位</h3><div className="rounded-2xl bg-slate-50 p-4"><div className="flex justify-between text-sm"><span className="text-slate-500">省份</span><span className="font-medium">{provinceName}</span></div><div className="mt-3 flex justify-between text-sm"><span className="text-slate-500">分数</span><span className="font-semibold">{report.userProfile.score}</span></div><div className="mt-3 flex justify-between text-sm"><span className="text-slate-500">位次</span><span className="font-semibold">{report.positionAnalysis.rank}</span></div><p className="mt-4 border-t pt-4 text-sm leading-6 text-slate-700">{report.positionAnalysis.positionDescription}</p></div></CardContent></Card>
         <Card className="mb-4 rounded-3xl border-slate-200 shadow-sm"><CardContent className="p-6"><h3 className="mb-3 text-lg font-semibold">推荐概览</h3><div className="space-y-3 text-sm leading-6 text-slate-700">{topStable && <p>稳妥方向可重点关注 <span className="font-medium text-slate-950">{topStable.university.name} · {topStable.major.name}</span>，参考概率约 {topStable.admissionChance}%。</p>}{topOpportunity && <p>捡漏候选：<span className="font-medium text-slate-950">{topOpportunity.university.name} · {topOpportunity.major.name}</span>，需结合位次波动谨慎判断。</p>}<p className="text-slate-500">解锁后可查看冲刺、稳妥、保底清单和追问 Agent。</p></div></CardContent></Card>
-        <Card className="mb-6 rounded-3xl border-slate-200 shadow-sm"><CardContent className="p-6"><h3 className="mb-3 text-lg font-semibold">风险提示</h3><div className="space-y-2">{report.riskWarnings.slice(0, 3).map((warning, idx) => <p key={idx} className="text-sm leading-6 text-slate-700">{warning}</p>)}</div></CardContent></Card>
+        <Card className="mb-6 rounded-3xl border-slate-200 shadow-sm"><CardContent className="p-6"><h3 className="mb-3 text-lg font-semibold">风险提示</h3><div className="space-y-2">{visibleRiskWarnings.length > 0 ? visibleRiskWarnings.map((warning, idx) => <p key={idx} className="text-sm leading-6 text-slate-700">{warning}</p>) : <p className="text-sm leading-6 text-slate-700">暂无额外风险提示，请以考试院和高校官方发布为准。</p>}</div></CardContent></Card>
         <div className="text-center"><Button size="lg" onClick={() => router.push('/unlock')} className="rounded-full bg-blue-700 px-8 text-white hover:bg-blue-800">解锁完整报告</Button><p className="mt-3 text-xs text-slate-500">完整报告包含数据证据、策略依据和风险诊断。</p></div>
       </main>
     </div>

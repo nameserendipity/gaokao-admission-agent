@@ -20,7 +20,7 @@ export async function answerReportQuestion(report: Report, question: string, his
   const toolResult = await collectAgentEvidence(report, trimmed);
   if (!process.env.DEEPSEEK_API_KEY) return buildToolBackedRuleAnswer(report, toolResult);
   const messages: DeepSeekMessage[] = [
-    { role: 'system', content: '\u4f60\u662f\u9ad8\u8003\u5fd7\u613f\u5de5\u5177\u578b Agent\u3002\u4f60\u5df2\u7ecf\u83b7\u5f97\u5de5\u5177\u7ed3\u679c\uff1a\u5f53\u524d\u62a5\u544a\u8bc1\u636e\u3001\u672c\u5730\u5f55\u53d6\u6570\u636e\u5e93\u3001\u8001\u5e08\u65b9\u6cd5\u8bba\u77e5\u8bc6\u5e93\uff0c\u5fc5\u8981\u65f6\u8fd8\u6709 Tavily \u7f51\u9875\u68c0\u7d22\u3002\u53ea\u80fd\u4f9d\u636e\u8fd9\u4e9b JSON \u8bc1\u636e\u56de\u7b54\uff0c\u4e0d\u5f97\u7f16\u9020\u5206\u6570\u3001\u4f4d\u6b21\u3001\u9662\u6821\u3001\u4e13\u4e1a\u6216\u6765\u6e90\uff1b\u7f51\u9875\u7ed3\u679c\u5fc5\u987b\u63d0\u793a\u9700\u5b98\u65b9\u6838\u9a8c\uff1b\u4e0d\u627f\u8bfa\u5f55\u53d6\uff1b\u4e0d\u8981\u4f7f\u7528 Markdown \u52a0\u7c97\u7b26\u53f7\u3002' },
+    { role: 'system', content: '\u4f60\u662f\u9ad8\u8003\u5fd7\u613f\u5de5\u5177\u578b Agent\u3002\u4f60\u5df2\u7ecf\u83b7\u5f97\u5de5\u5177\u7ed3\u679c\uff1a\u5f53\u524d\u62a5\u544a\u8bc1\u636e\u3001\u672c\u5730\u5f55\u53d6\u6570\u636e\u5e93\u3001\u8001\u5e08\u65b9\u6cd5\u8bba\u77e5\u8bc6\u5e93\uff0c\u5fc5\u8981\u65f6\u8fd8\u6709 Tavily \u7f51\u9875\u68c0\u7d22\u3002\u53ea\u80fd\u4f9d\u636e\u8fd9\u4e9b JSON \u8bc1\u636e\u56de\u7b54\uff0c\u4e0d\u5f97\u7f16\u9020\u5206\u6570\u3001\u4f4d\u6b21\u3001\u9662\u6821\u3001\u4e13\u4e1a\u6216\u6765\u6e90\uff1b\u5982\u679c\u5de5\u5177\u7ed3\u679c\u5305\u542b tavily_search\uff0c\u5fc5\u987b\u4f7f\u7528\u5176\u6807\u9898\u3001\u6458\u8981\u548cURL\u6765\u56de\u7b54\uff0c\u4e0d\u8981\u8bf4\u201c\u65e0\u6cd5\u67e5\u8be2\u201d\u6216\u201c\u6ca1\u6709\u8c03\u7528\u641c\u7d22\u201d\uff1b\u7f51\u9875\u7ed3\u679c\u5fc5\u987b\u63d0\u793a\u9700\u5b98\u65b9\u6838\u9a8c\uff1b\u4e0d\u627f\u8bfa\u5f55\u53d6\uff1b\u4e0d\u8981\u4f7f\u7528 Markdown \u52a0\u7c97\u7b26\u53f7\u3002' },
     { role: 'user', content: `\u5f53\u524d\u62a5\u544a\u6458\u8981JSON\uff1a${JSON.stringify(compactReportEvidence(report))}` },
     { role: 'user', content: `\u5de5\u5177\u8c03\u7528\u7ed3\u679cJSON\uff1a${JSON.stringify(toolResult)}` },
     ...history.slice(-6).map(item => ({ role: item.role, content: item.content }) as DeepSeekMessage),
@@ -88,8 +88,9 @@ function buildToolBackedRuleAnswer(report: Report, toolResult: AgentToolResult):
 function appendToolFooter(answer: string, toolResult: AgentToolResult): string {
   const labels: Record<AgentToolResult['usedTools'][number], string> = {
     report: '当前报告',
-    local_admission_db: '本地录取数据库',
-    teacher_knowledge: '老师方法论知识库',
+    local_admission_db: '\u672c\u5730\u5f55\u53d6\u6570\u636e\u5e93',
+    admission_trend_lookup: '\u5f55\u53d6\u8d8b\u52bf\u8865\u67e5',
+    teacher_knowledge: '\u8001\u5e08\u65b9\u6cd5\u8bba\u77e5\u8bc6\u5e93',
     tavily_search: 'Tavily 网页检索',
   };
   const used = toolResult.usedTools.map(tool => labels[tool]).join('、');

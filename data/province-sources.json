@@ -1,0 +1,121 @@
+[
+  {
+    "province": "天津",
+    "status": "missing",
+    "officialSite": "http://www.zhaokao.net/",
+    "keywords": ["天津", "普通高校招生", "投档线", "位次", "2025"],
+    "targetFiles": ["普通类本科批投档线", "普通类高职专科批投档线", "一分一段表"]
+  },
+  {
+    "province": "山西",
+    "status": "missing",
+    "officialSite": "http://www.sxkszx.cn/",
+    "keywords": ["山西", "普通高校招生", "投档最低分", "2025"],
+    "targetFiles": ["本科批投档线", "专科批投档线", "一分一段表"]
+  },
+  {
+    "province": "辽宁",
+    "status": "missing",
+    "officialSite": "https://www.lnzsks.com/",
+    "keywords": ["辽宁", "普通高校招生", "投档最低分", "2025"],
+    "targetFiles": ["本科批投档最低分", "高职专科批投档最低分", "一分一段表"]
+  },
+  {
+    "province": "吉林",
+    "status": "missing",
+    "officialSite": "http://www.jleea.com.cn/",
+    "keywords": ["吉林", "普通高校招生", "投档线", "2025"],
+    "targetFiles": ["本科批投档线", "专科批投档线", "一分一段表"]
+  },
+  {
+    "province": "福建",
+    "status": "missing",
+    "officialSite": "https://www.eeafj.cn/",
+    "keywords": ["福建", "普通高校招生", "投档线", "2025"],
+    "targetFiles": ["本科批常规志愿院校专业组投档线", "高职专科批投档线", "一分一段表"]
+  },
+  {
+    "province": "江西",
+    "status": "missing",
+    "officialSite": "http://www.jxeea.cn/",
+    "keywords": ["江西", "普通高校招生", "投档情况统计表", "2025"],
+    "targetFiles": ["本科批投档情况统计表", "高职专科批投档情况统计表", "一分一段表"]
+  },
+  {
+    "province": "河南",
+    "status": "missing",
+    "officialSite": "https://www.haeea.cn/",
+    "keywords": ["河南", "普通高招", "投档分数线", "2025"],
+    "targetFiles": ["本科批院校平行投档分数线", "高职高专批投档分数线", "一分一段表"]
+  },
+  {
+    "province": "广西",
+    "status": "missing",
+    "officialSite": "https://www.gxeea.cn/",
+    "keywords": ["广西", "普通高校招生", "投档最低分", "2025"],
+    "targetFiles": ["本科批投档最低分", "高职高专普通批投档最低分", "一分一段表"]
+  },
+  {
+    "province": "四川",
+    "status": "missing",
+    "officialSite": "https://www.sceea.cn/",
+    "keywords": ["四川", "普通高校招生", "调档线", "2025"],
+    "targetFiles": ["本科批院校调档线", "专科批院校调档线", "一分一段表"]
+  },
+  {
+    "province": "贵州",
+    "status": "missing",
+    "officialSite": "https://zsksy.guizhou.gov.cn/",
+    "keywords": ["贵州", "普通高校招生", "投档情况", "2025"],
+    "targetFiles": ["本科批投档情况", "高职专科批投档情况", "一分一段表"]
+  },
+  {
+    "province": "云南",
+    "status": "missing",
+    "officialSite": "https://www.ynzs.cn/",
+    "keywords": ["云南", "普通高校招生", "录取日报", "投档线", "2025"],
+    "targetFiles": ["本科批投档线", "专科批投档线", "一分一段表"]
+  },
+  {
+    "province": "陕西",
+    "status": "missing",
+    "officialSite": "https://www.sneea.cn/",
+    "keywords": ["陕西", "普通高校招生", "投档情况", "2025"],
+    "targetFiles": ["本科批正式投档情况统计表", "高职专科批投档情况统计表", "一分一段表"]
+  },
+  {
+    "province": "甘肃",
+    "status": "missing",
+    "officialSite": "https://www.ganseea.cn/",
+    "keywords": ["甘肃", "普通高校招生", "投档最低分", "2025"],
+    "targetFiles": ["本科批投档最低分", "高职专科批投档最低分", "一分一段表"]
+  },
+  {
+    "province": "青海",
+    "status": "missing",
+    "officialSite": "https://www.qhjyks.com/",
+    "keywords": ["青海", "普通高校招生", "投档情况", "2025"],
+    "targetFiles": ["本科批投档情况", "专科批投档情况", "一分一段表"]
+  },
+  {
+    "province": "宁夏",
+    "status": "missing",
+    "officialSite": "https://www.nxjyks.cn/",
+    "keywords": ["宁夏", "普通高校招生", "投档信息", "2025"],
+    "targetFiles": ["本科批投档信息", "高职专科批投档信息", "一分一段表"]
+  },
+  {
+    "province": "新疆",
+    "status": "missing",
+    "officialSite": "https://www.xjzk.gov.cn/",
+    "keywords": ["新疆", "普通高校招生", "投档情况", "2025"],
+    "targetFiles": ["本科批投档情况", "高职专科批投档情况", "一分一段表"]
+  },
+  {
+    "province": "西藏",
+    "status": "low_priority",
+    "officialSite": "http://zsks.edu.xizang.gov.cn/",
+    "keywords": ["西藏", "普通高校招生", "投档", "2025"],
+    "targetFiles": ["本科批投档信息", "专科批投档信息", "一分一段表"]
+  }
+]

@@ -161,5 +161,7 @@ Desktop.ini
 .coze-logs
 
 # Large generated SQLite database. Commit data/admission_clean.db.gz instead.
-data/admission_clean.db
+data/*.db
+data/*.db-wal
+data/*.db-shm
 !data/admission_clean.db.gz

@@ -13,6 +13,7 @@ import {
   getMajorByName,
   universities
 } from './mock-data';
+import { getProvinceLabel, getProvinceMeta } from './provinces';
 
 /**
  * 根据用户输入分析并生成志愿推荐报告
@@ -469,18 +470,14 @@ function generateRiskNotes(record: AdmissionRecord, rankDiff: number): string | 
  * 根据省份获取所属区域
  */
 function getRegionByProvince(province: Province): string {
-  const regionMap: Record<Province, string> = {
-    'zhejiang': 'east',
-    'shandong': 'east'
-  };
-  return regionMap[province] || 'east';
+  return getProvinceMeta(province).region;
 }
 
 /**
  * 生成位次描述
  */
 function generatePositionDescription(rankPercentile: number, province: Province): string {
-  const provinceName = province === 'zhejiang' ? '浙江' : '山东';
+  const provinceName = getProvinceLabel(province);
 
   if (rankPercentile < 5) {
     return `在${provinceName}省考生中处于顶尖水平（前${rankPercentile.toFixed(1)}%），可冲击985/211顶尖高校`;

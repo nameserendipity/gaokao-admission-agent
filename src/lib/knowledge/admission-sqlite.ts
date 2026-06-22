@@ -2,16 +2,47 @@ import fs from 'node:fs';
 import path from 'node:path';
 import initSqlJs, { Database, SqlJsStatic } from 'sql.js';
 import type { AdmissionRecord, Province, SubjectCategory } from '@/lib/types';
+import { getProvinceMeta, isProvince, PROVINCES } from '@/lib/provinces';
 import type { AdmissionEvidence, KnowledgeSearchInput, KnowledgeSearchResult } from './types';
 
 const DB_PATH = process.env.ADMISSION_DB_PATH || path.join(process.cwd(), 'data', 'admission_clean.db');
-const PROVINCE_NAME: Record<Province, string> = { zhejiang: '\u6d59\u6c5f', shandong: '\u5c71\u4e1c' };
-const PROVINCE_CODE: Record<string, Province> = { '\u6d59\u6c5f': 'zhejiang', '\u5c71\u4e1c': 'shandong' };
+const PROVINCE_NAME: Record<Province, string> = Object.fromEntries(PROVINCES.map(province => [province.value, province.dbName])) as Record<Province, string>;
+const PROVINCE_CODE: Record<string, Province> = Object.fromEntries(PROVINCES.map(province => [province.dbName, province.value])) as Record<string, Province>;
 
 let sqlJsPromise: Promise<SqlJsStatic> | null = null;
 let databasePromise: Promise<Database> | null = null;
 
 interface AdmissionRow { id: number; province: string; year: number; category: string | null; batch: string | null; school_name: string; major_name: string | null; score: number | null; rank: number | null; quota: number | null; source_file: string | null; }
+export interface ArtSportsAdmissionRow {
+  id: number;
+  province: string;
+  year: number;
+  batch: string;
+  candidate_type: 'art' | 'sports';
+  category: string;
+  school_code: string | null;
+  school_name: string;
+  group_code: string;
+  group_name: string | null;
+  filing_score: number;
+  filing_rank: number | null;
+  source_file: string | null;
+}
+
+export interface ArtSportsAdmission {
+  id: number;
+  year: number;
+  batch: string;
+  candidateType: 'art' | 'sports';
+  category: string;
+  schoolCode: string | null;
+  schoolName: string;
+  groupCode: string;
+  groupName: string | null;
+  filingScore: number;
+  filingRank: number | null;
+  sourceFile: string | null;
+}
 
 export function getAdmissionDbPath(): string { return DB_PATH; }
 export function hasAdmissionDatabase(): boolean { return fs.existsSync(DB_PATH); }
@@ -36,7 +67,7 @@ function resolveSqlJsAsset(file: string): string {
 async function getDatabase(): Promise<Database> {
   if (!databasePromise) {
     databasePromise = (async () => {
-      if (!hasAdmissionDatabase()) throw new Error(`\u672c\u5730\u5f55\u53d6\u6570\u636e\u5e93\u4e0d\u5b58\u5728\uff1a${DB_PATH}`);
+      if (!hasAdmissionDatabase()) throw new Error(`本地录取数据库不存在：${DB_PATH}`);
       const SQL = await getSqlJs();
       return new SQL.Database(fs.readFileSync(DB_PATH));
     })();
@@ -47,38 +78,313 @@ async function getDatabase(): Promise<Database> {
 export async function inspectAdmissionDatabase() {
   const db = await getDatabase();
   const count = selectRows<{ count: number }>(db, 'select count(*) as count from admission')[0]?.count ?? 0;
+  const searchTable = getAdmissionSearchTable(db);
+  const searchCount = selectRows<{ count: number }>(db, `select count(*) as count from ${searchTable}`)[0]?.count ?? 0;
   const provinces = selectRows<{ province: string; count: number }>(db, 'select province, count(*) as count from admission group by province order by count desc, province');
   const years = selectRows<{ year: number; count: number }>(db, 'select year, count(*) as count from admission group by year order by year desc');
-  return { path: DB_PATH, count, provinces, years };
+  return { path: DB_PATH, count, searchTable, searchCount, provinces, years };
 }
+
 
 export async function searchAdmissionKnowledge(input: KnowledgeSearchInput): Promise<KnowledgeSearchResult> {
   const db = await getDatabase();
+  const searchTable = getAdmissionSearchTable(db);
+  const idColumn = searchTable === 'recommendation_records' ? 'admission_id' : 'id';
+  const selectColumns = `${idColumn} as id, province, year, category, batch, school_name, major_name, score, rank, quota, source_file`;
   const provinceName = PROVINCE_NAME[input.province];
-  const limit = Math.max(20, Math.min(input.limit ?? 160, 300));
+  if (!provinceName) throw new Error(`暂不支持该省份：${input.province}`);
+  const limit = Math.max(20, Math.min(input.limit ?? 160, 800));
   const rankWindow = calculateRankWindow(input.rank);
   const scoreWindow = 80;
   const excludeClause = buildExcludeClause(input.excludedMajors);
+  const primaryOrder = input.balancedYears
+    ? `case when rank is not null and rank > 0 then abs(rank - ${Math.round(input.rank)}) else 999999999 end asc, case when score is not null and score > 0 then abs(score - ${Math.round(input.score)}) else 999999999 end asc, year desc`
+    : `year desc, case when rank is not null and rank > 0 then abs(rank - ${Math.round(input.rank)}) else 999999999 end asc, case when score is not null and score > 0 then abs(score - ${Math.round(input.score)}) else 999999999 end asc`;
+  const scoreOrder = input.balancedYears
+    ? `abs(score - ${Math.round(input.score)}) asc, year desc, rank asc`
+    : `year desc, abs(score - ${Math.round(input.score)}) asc, rank asc`;
+  const rankOrder = input.balancedYears
+    ? `abs(rank - ${Math.round(input.rank)}) asc, year desc`
+    : `year desc, abs(rank - ${Math.round(input.rank)}) asc`;
   const params: (string | number)[] = [provinceName, input.rank + rankWindow, input.rank - rankWindow, input.score - scoreWindow, input.score + scoreWindow];
-  const sql = `select id, province, year, category, batch, school_name, major_name, score, rank, quota, source_file from admission where province = ? and rank is not null and score is not null and rank <= ? and rank >= ? and score between ? and ? ${excludeClause.sql} order by year desc, abs(rank - ${Math.round(input.rank)}) asc, abs(score - ${Math.round(input.score)}) asc limit ${limit}`;
+  const sql = `select ${selectColumns} from ${searchTable} where province = ? and ((rank is not null and rank > 0 and rank <= ? and rank >= ?) or (score is not null and score > 0 and score between ? and ?)) ${excludeClause.sql} order by ${primaryOrder} limit ${limit}`;
   params.push(...excludeClause.params);
   let rows = selectRows<AdmissionRow>(db, sql, params);
   const warnings: string[] = [];
   if (rows.length < 40) {
     warnings.push('\u672c\u5730\u6570\u636e\u5e93\u6309\u4f4d\u6b21\u7a97\u53e3\u547d\u4e2d\u8f83\u5c11\uff0c\u5df2\u6269\u5927\u68c0\u7d22\u8303\u56f4\u3002');
     const broadParams: (string | number)[] = [provinceName, input.score - 120, input.score + 120, ...excludeClause.params];
-    rows = selectRows<AdmissionRow>(db, `select id, province, year, category, batch, school_name, major_name, score, rank, quota, source_file from admission where province = ? and rank is not null and score is not null and score between ? and ? ${excludeClause.sql} order by year desc, abs(score - ${Math.round(input.score)}) asc, rank asc limit ${limit}`, broadParams);
+    rows = selectRows<AdmissionRow>(db, `select ${selectColumns} from ${searchTable} where province = ? and rank is not null and score is not null and score between ? and ? ${excludeClause.sql} order by ${scoreOrder} limit ${limit}`, broadParams);
   }
   if (rows.length < 20) {
     warnings.push('当前省份分数证据不足，已使用位次数据补充匹配。');
     const rankOnlyParams: (string | number)[] = [provinceName, input.rank + rankWindow, input.rank - rankWindow, ...excludeClause.params];
-    rows = selectRows<AdmissionRow>(db, `select id, province, year, category, batch, school_name, major_name, score, rank, quota, source_file from admission where province = ? and rank is not null and rank <= ? and rank >= ? ${excludeClause.sql} order by year desc, abs(rank - ${Math.round(input.rank)}) asc limit ${limit}`, rankOnlyParams);
+    rows = selectRows<AdmissionRow>(db, `select ${selectColumns} from ${searchTable} where province = ? and rank is not null and rank <= ? and rank >= ? ${excludeClause.sql} order by ${rankOrder} limit ${limit}`, rankOnlyParams);
   }
-  return { records: rows.map(toEvidence).filter(item => subjectRoughlyMatches(item, input.subjectCategory)), source: 'sqlite', warnings };
+  if (rows.length > 0 && rows.every(row => !row.rank || row.rank <= 0)) warnings.push('当前省份原始数据缺少位次字段，系统已按分数估算位次用于排序，建议结合官方一分一段表复核。');
+  if (rows.length > 0 && rows.every(row => !row.score || row.score <= 0)) warnings.push('当前省份原始数据缺少分数字段，报告将优先使用位次证据。');
+  return { records: rows.map(row => toEvidence(row, input)).filter(item => subjectRoughlyMatches(item, input.subjectCategory)), source: 'sqlite', warnings };
+}
+
+export async function searchArtSportsAdmissions(input: {
+  candidateType: 'art' | 'sports';
+  category?: string;
+  compositeScore: number;
+  limit?: number;
+}): Promise<{ records: ArtSportsAdmission[]; warnings: string[] }> {
+  const db = await getArtSportsDatabase();
+  const tableExists = hasTable(db, 'art_sports_admission');
+  if (!tableExists) throw new Error('本地数据库缺少 art_sports_admission 艺体投档表。');
+
+  const limit = Math.max(20, Math.min(input.limit ?? 120, 300));
+  const score = input.compositeScore;
+  const params: (string | number)[] = [input.candidateType];
+  let where = "province = '江西' and candidate_type = ?";
+  if (input.category && input.candidateType === 'art') {
+    where += ' and category = ?';
+    params.push(input.category);
+  }
+  const warnings: string[] = [];
+  let rows = selectRows<ArtSportsAdmissionRow>(
+    db,
+    `select id, province, year, batch, candidate_type, category, school_code, school_name, group_code, group_name, filing_score, filing_rank, source_file
+     from art_sports_admission
+     where ${where} and filing_score between ? and ?
+     order by year desc, abs(filing_score - ?) asc, filing_score desc
+     limit ${limit}`,
+    [...params, score - 35, score + 35, score],
+  );
+  if (rows.length < 20) {
+    warnings.push('按当前综合分窗口命中较少，已扩大艺体投档线检索范围。');
+    rows = selectRows<ArtSportsAdmissionRow>(
+      db,
+      `select id, province, year, batch, candidate_type, category, school_code, school_name, group_code, group_name, filing_score, filing_rank, source_file
+       from art_sports_admission
+       where ${where}
+       order by year desc, abs(filing_score - ?) asc, filing_score desc
+       limit ${limit}`,
+      [...params, score],
+    );
+  }
+  if (rows.length === 0 && input.category && input.candidateType === 'art') {
+    warnings.push('所选艺术类别未精确命中本地类别名称，已放宽为艺术类全类别匹配。');
+    rows = selectRows<ArtSportsAdmissionRow>(
+      db,
+      `select id, province, year, batch, candidate_type, category, school_code, school_name, group_code, group_name, filing_score, filing_rank, source_file
+       from art_sports_admission
+       where province = '江西' and candidate_type = ?
+       order by year desc, abs(filing_score - ?) asc, filing_score desc
+       limit ${limit}`,
+      [input.candidateType, score],
+    );
+  }
+  return {
+    records: rows.map(row => ({
+      id: row.id,
+      year: row.year,
+      batch: row.batch,
+      candidateType: row.candidate_type,
+      category: row.category,
+      schoolCode: row.school_code,
+      schoolName: row.school_name,
+      groupCode: row.group_code,
+      groupName: row.group_name,
+      filingScore: row.filing_score,
+      filingRank: row.filing_rank,
+      sourceFile: row.source_file,
+    })),
+    warnings,
+  };
+}
+
+async function getArtSportsDatabase(): Promise<Database> {
+  const primary = await getDatabase();
+  if (hasTable(primary, 'art_sports_admission')) return primary;
+  const fallbackPath = path.join(process.cwd(), 'data', 'admission_clean.db');
+  if (path.resolve(fallbackPath) === path.resolve(DB_PATH) || !fs.existsSync(fallbackPath)) return primary;
+  const SQL = await getSqlJs();
+  return new SQL.Database(fs.readFileSync(fallbackPath));
+}
+
+function hasTable(db: Database, tableName: string): boolean {
+  return selectRows<{ name: string }>(
+    db,
+    "select name from sqlite_master where type = 'table' and name = ? limit 1",
+    [tableName],
+  ).length > 0;
+}
+
+
+export interface AdmissionTrendRecord {
+  year: number;
+  category: string | null;
+  batch: string | null;
+  schoolName: string;
+  majorName: string | null;
+  score: number | null;
+  rank: number | null;
+  quota: number | null;
+  sourceFile: string | null;
+}
+
+export interface AdmissionTrendLookupResult {
+  schoolName: string;
+  majorKeyword: string;
+  records: AdmissionTrendRecord[];
+  trend: {
+    yearsCovered: number[];
+    rankDirection: 'rising' | 'falling' | 'stable' | 'volatile' | 'insufficient';
+    scoreDirection: 'rising' | 'falling' | 'stable' | 'volatile' | 'insufficient';
+    summary: string;
+  };
+}
+
+export async function lookupAdmissionTrend(input: {
+  province: Province;
+  schoolName: string;
+  majorName?: string;
+  category?: string;
+  years?: number[];
+  limitPerYear?: number;
+}): Promise<AdmissionTrendLookupResult> {
+  const db = await getDatabase();
+  const searchTable = getAdmissionSearchTable(db);
+  const provinceName = PROVINCE_NAME[input.province];
+  const years = (input.years && input.years.length > 0 ? input.years : [2023, 2024, 2025]).sort((a, b) => b - a);
+  const limitPerYear = Math.max(1, Math.min(input.limitPerYear ?? 3, 8));
+  const majorKeyword = extractMajorKeyword(input.majorName || '');
+  const category = normalizeCategoryKeyword(input.category || '');
+  const records: AdmissionTrendRecord[] = [];
+
+  for (const year of years) {
+    const params: (string | number)[] = [provinceName, input.schoolName, year];
+    let where = 'province = ? and school_name = ? and year = ?';
+    if (majorKeyword) {
+      where += ' and coalesce(major_name, \'\') like ?';
+      params.push(`%${majorKeyword}%`);
+    }
+    if (category) {
+      where += ' and coalesce(category, \'\') like ?';
+      params.push(`%${category}%`);
+    }
+    let rows = selectRows<AdmissionRow>(db, `select ${searchTable === 'recommendation_records' ? 'admission_id' : 'id'} as id, province, year, category, batch, school_name, major_name, score, rank, quota, source_file from ${searchTable} where ${where} order by case when rank is null or rank <= 0 then 1 else 0 end, rank asc, score desc limit ${limitPerYear}`, params);
+    if (rows.length === 0 && majorKeyword) {
+      const fallbackParams: (string | number)[] = [provinceName, input.schoolName, year];
+      rows = selectRows<AdmissionRow>(db, `select ${searchTable === 'recommendation_records' ? 'admission_id' : 'id'} as id, province, year, category, batch, school_name, major_name, score, rank, quota, source_file from ${searchTable} where province = ? and school_name = ? and year = ? order by case when rank is null or rank <= 0 then 1 else 0 end, rank asc, score desc limit ${limitPerYear}`, fallbackParams);
+    }
+    records.push(...rows.map(row => ({
+      year: row.year,
+      category: row.category,
+      batch: row.batch,
+      schoolName: row.school_name,
+      majorName: row.major_name,
+      score: row.score,
+      rank: row.rank,
+      quota: row.quota,
+      sourceFile: row.source_file,
+    })));
+  }
+
+  return {
+    schoolName: input.schoolName,
+    majorKeyword,
+    records,
+    trend: buildTrendSummary(records),
+  };
+}
+
+function extractMajorKeyword(majorName: string): string {
+  const first = majorName.split('|')[0]?.trim() || majorName.trim();
+  const cleaned = first.replace(/[（(].*?[）)]/g, '').replace(/\d{2,3}\s*人/g, '').trim();
+  const known = ['计算机', '软件工程', '电子信息', '自动化', '人工智能', '数据科学', '临床医学', '口腔医学', '法学', '金融', '会计', '师范', '汉语言'];
+  return known.find(item => cleaned.includes(item)) || cleaned.slice(0, 12);
+}
+
+function normalizeCategoryKeyword(category: string): string {
+  if (/物理|理科|综合改革|普通类/.test(category)) return category.includes('理科') ? '理科' : category.includes('物理') ? '物理' : '普通类';
+  if (/历史|文科/.test(category)) return category.includes('文科') ? '文科' : '历史';
+  return category;
+}
+
+function buildTrendSummary(records: AdmissionTrendRecord[]): AdmissionTrendLookupResult['trend'] {
+  const byYear = new Map<number, AdmissionTrendRecord[]>();
+  for (const record of records) {
+    const list = byYear.get(record.year) || [];
+    list.push(record);
+    byYear.set(record.year, list);
+  }
+  const yearly = [...byYear.entries()].map(([year, list]) => {
+    const ranked = list.filter(item => item.rank && item.rank > 0).sort((a, b) => (a.rank || 0) - (b.rank || 0));
+    const scored = list.filter(item => item.score && item.score > 0).sort((a, b) => (b.score || 0) - (a.score || 0));
+    return { year, rank: ranked[0]?.rank || null, score: scored[0]?.score || null };
+  }).sort((a, b) => a.year - b.year);
+  const yearsCovered = yearly.map(item => item.year);
+  const rankDirection = judgeDirection(yearly.map(item => item.rank), true);
+  const scoreDirection = judgeDirection(yearly.map(item => item.score), false);
+  const summary = summarizeTrend(yearly, rankDirection, scoreDirection);
+  return { yearsCovered, rankDirection, scoreDirection, summary };
+}
+
+function judgeDirection(values: (number | null)[], lowerIsRising: boolean): 'rising' | 'falling' | 'stable' | 'volatile' | 'insufficient' {
+  const valid = values.filter((value): value is number => Boolean(value && value > 0));
+  if (valid.length < 2) return 'insufficient';
+  const first = valid[0];
+  const last = valid[valid.length - 1];
+  const change = (last - first) / Math.max(first, 1);
+  const rising = lowerIsRising ? change < -0.05 : change > 0.03;
+  const falling = lowerIsRising ? change > 0.05 : change < -0.03;
+  const diffs = valid.slice(1).map((value, index) => value - valid[index]);
+  const hasUp = diffs.some(diff => diff > Math.max(first * 0.03, 500));
+  const hasDown = diffs.some(diff => diff < -Math.max(first * 0.03, 500));
+  if (hasUp && hasDown) return 'volatile';
+  if (rising) return 'rising';
+  if (falling) return 'falling';
+  return 'stable';
+}
+
+function summarizeTrend(yearly: { year: number; rank: number | null; score: number | null }[], rankDirection: string, scoreDirection: string): string {
+  if (yearly.length < 2) return '历史记录不足，暂不能形成可靠趋势。';
+  const first = yearly[0];
+  const last = yearly[yearly.length - 1];
+  const rankText = first.rank && last.rank ? `位次从 ${first.rank} 到 ${last.rank}` : '位次数据不完整';
+  const scoreText = first.score && last.score ? `分数从 ${first.score} 到 ${last.score}` : '分数数据不完整';
+  const directionText: Record<string, string> = { rising: '录取门槛上升', falling: '录取门槛下降', stable: '整体稳定', volatile: '波动较大', insufficient: '样本不足' };
+  return `${yearly[0].year}-${last.year}：${rankText}，${scoreText}，综合判断为${directionText[rankDirection] || directionText[scoreDirection] || '样本不足'}。`;
 }
 
 export function evidenceToAdmissionRecord(item: AdmissionEvidence): AdmissionRecord {
-  return { id: item.id, universityCode: stableCode(item.schoolName), universityName: item.schoolName, universityLevel: item.schoolLevel, province: item.province, year: item.year, majorName: item.majorName, majorCategory: item.majorCategory, subjectRequirement: item.subjectRequirement, admissionType: 'parallel', lowestScore: item.score, lowestRank: item.rank, averageScore: item.score, highestScore: item.score, dataSource: item.sourceFile || `${item.provinceName}${item.year}\u5e74\u5f55\u53d6\u6570\u636e`, sourceUrl: item.sourceUrl, collectedAt: new Date().toISOString(), batchId: `sqlite-${item.year}`, notes: item.quota ? `\u62db\u751f\u8ba1\u5212\u6570\uff1a${item.quota}` : undefined };
+  const displayMajorName = normalizeDisplayMajorName(item.majorName);
+  const notes = [
+    item.quota ? `\u62db\u751f\u8ba1\u5212\u6570\uff1a${item.quota}` : undefined,
+    displayMajorName !== item.majorName ? `\u539f\u59cb\u4e13\u4e1a\u7ec4\u4fe1\u606f\uff1a${item.majorName}` : undefined,
+  ].filter((note): note is string => Boolean(note));
+  return { id: item.id, universityCode: stableCode(item.schoolName), universityName: item.schoolName, universityLevel: item.schoolLevel, province: item.province, year: item.year, majorName: displayMajorName, majorCategory: inferMajorCategory(displayMajorName), subjectRequirement: inferSubjectRequirement(item.category, displayMajorName), admissionType: 'parallel', lowestScore: item.score, lowestRank: item.rank, averageScore: item.score, highestScore: item.score, dataSource: item.sourceFile || `${item.provinceName}${item.year}\u5e74\u5f55\u53d6\u6570\u636e`, sourceUrl: item.sourceUrl, collectedAt: new Date().toISOString(), batchId: `sqlite-${item.year}`, notes: notes.length > 0 ? notes.join('\uff1b') : undefined };
+}
+
+function normalizeDisplayMajorName(rawMajorName: string): string {
+  const raw = rawMajorName.trim();
+  if (!raw) return '\u672a\u6ce8\u660e\u4e13\u4e1a';
+  const withNormalizedPipes = raw.replace(/[｜]/g, '|').replace(/\s+/g, ' ').trim();
+  const containsMatch = withNormalizedPipes.match(/[（(]\s*(?:含|包含|含有)\s*[:：]\s*([^()（）]+)[）)]/);
+  if (containsMatch?.[1]) return tidyMajorList(containsMatch[1]);
+  const withoutLeadingCodes = withNormalizedPipes
+    .replace(/^(?:[A-Z]?\d{1,6}\s*\|\s*){1,5}/i, '')
+    .replace(/^\d{1,6}\s+/, '')
+    .trim();
+  const cleaned = withoutLeadingCodes || withNormalizedPipes;
+  if (/^(?:[A-Z]?\d{1,6})(?:\s*\|\s*[A-Z]?\d{1,6}){0,4}$/i.test(cleaned)) return '\u9662\u6821\u4e13\u4e1a\u7ec4';
+  return tidyMajorList(cleaned);
+}
+
+function tidyMajorList(value: string): string {
+  return value
+    .replace(/^[：:、,，\s|]+/, '')
+    .replace(/[;；]/g, '、')
+    .replace(/\s*[、,，]\s*/g, '、')
+    .replace(/\s*\|\s*/g, ' / ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[、,，;；\s]+$/, '') || '\u9662\u6821\u4e13\u4e1a\u7ec4';
 }
 
 function selectRows<T extends object>(db: Database, sql: string, params: (string | number)[] = []): T[] {
@@ -88,10 +394,23 @@ function selectRows<T extends object>(db: Database, sql: string, params: (string
   return rows;
 }
 
-function toEvidence(row: AdmissionRow): AdmissionEvidence {
-  const province = PROVINCE_CODE[row.province] || 'zhejiang';
-  const majorName = row.major_name || '\u672a\u6ce8\u660e\u4e13\u4e1a';
-  return { id: `sqlite-${row.id}`, source: 'sqlite', province, provinceName: row.province, year: row.year, category: row.category || '\u672a\u6ce8\u660e\u7c7b\u522b', batch: row.batch || '\u672a\u6ce8\u660e\u6279\u6b21', schoolName: row.school_name, majorName, score: row.score || 0, rank: row.rank || 0, quota: row.quota || undefined, sourceFile: row.source_file || undefined, subjectRequirement: inferSubjectRequirement(row.category || '', majorName), majorCategory: inferMajorCategory(majorName), schoolLevel: inferSchoolLevel(row.school_name) };
+
+function getAdmissionSearchTable(db: Database): 'recommendation_records' | 'admission' {
+  const rows = selectRows<{ name: string }>(
+    db,
+    "select name from sqlite_master where type = 'table' and name = 'recommendation_records' limit 1",
+  );
+  return rows.length > 0 ? 'recommendation_records' : 'admission';
+}
+
+function toEvidence(row: AdmissionRow, input: KnowledgeSearchInput): AdmissionEvidence {
+  const province = PROVINCE_CODE[row.province];
+  if (!isProvince(province)) throw new Error(`数据库中存在未登记省份：${row.province}`);
+  const rawMajorName = row.major_name || '\u672a\u6ce8\u660e\u4e13\u4e1a';
+  const displayMajorName = normalizeDisplayMajorName(rawMajorName);
+  const score = row.score || 0;
+  const rank = row.rank && row.rank > 0 ? row.rank : estimateRankFromScore(province, score, input);
+  return { id: `sqlite-${row.id}`, source: 'sqlite', province, provinceName: row.province, year: row.year, category: row.category || '\u672a\u6ce8\u660e\u7c7b\u522b', batch: row.batch || '\u672a\u6ce8\u660e\u6279\u6b21', schoolName: row.school_name, majorName: rawMajorName, score, rank, quota: row.quota || undefined, sourceFile: row.source_file || undefined, subjectRequirement: inferSubjectRequirement(row.category || '', displayMajorName), majorCategory: inferMajorCategory(displayMajorName), schoolLevel: inferSchoolLevel(row.school_name) };
 }
 
 function calculateRankWindow(rank: number): number { if (rank <= 5000) return 12000; if (rank <= 30000) return 25000; if (rank <= 100000) return 50000; return 90000; }
@@ -108,3 +427,17 @@ function inferMajorCategory(majorName: string): string { if (/\u8ba1\u7b97\u673a
 function inferSchoolLevel(schoolName: string): AdmissionEvidence['schoolLevel'] { const level985 = ['\u6e05\u534e\u5927\u5b66', '\u5317\u4eac\u5927\u5b66', '\u6d59\u6c5f\u5927\u5b66', '\u590d\u65e6\u5927\u5b66', '\u4e0a\u6d77\u4ea4\u901a\u5927\u5b66', '\u5357\u4eac\u5927\u5b66', '\u5c71\u4e1c\u5927\u5b66', '\u4e2d\u56fd\u6d77\u6d0b\u5927\u5b66']; const level211 = ['\u5317\u4eac\u90ae\u7535\u5927\u5b66', '\u4e0a\u6d77\u8d22\u7ecf\u5927\u5b66', '\u4e2d\u592e\u8d22\u7ecf\u5927\u5b66', '\u4e2d\u56fd\u653f\u6cd5\u5927\u5b66', '\u5357\u4eac\u7406\u5de5\u5927\u5b66', '\u82cf\u5dde\u5927\u5b66']; if (level985.some(name => schoolName.includes(name))) return '985'; if (level211.some(name => schoolName.includes(name))) return '211'; if (/\u5927\u5b66|\u5b66\u9662/.test(schoolName)) return 'ordinary'; return 'vocational'; }
 function subjectRoughlyMatches(item: AdmissionEvidence, subject: SubjectCategory): boolean { if (subject === 'other') return true; return item.subjectRequirement.includes(subject) || item.subjectRequirement.includes('other') || item.subjectRequirement.includes('physics_history'); }
 function stableCode(value: string): string { let hash = 0; for (const char of value) hash = (hash * 31 + char.charCodeAt(0)) >>> 0; return `sch-${hash.toString(16)}`; }
+
+function estimateRankFromScore(province: Province, score: number, input: KnowledgeSearchInput): number {
+  if (score <= 0) return 0;
+  const scoreDiff = input.score - score;
+  if (input.rank > 0 && Math.abs(scoreDiff) <= 120) {
+    return Math.max(1, Math.round(input.rank + scoreDiff * 1200));
+  }
+  const scoreRatio = score / 750;
+  const totalStudents = getProvinceMeta(province).totalStudents;
+  if (scoreRatio > 0.9) return Math.max(1, Math.round(totalStudents * (1 - scoreRatio) * 0.35));
+  if (scoreRatio > 0.8) return Math.max(1, Math.round(totalStudents * (1 - scoreRatio) * 0.55));
+  if (scoreRatio > 0.7) return Math.max(1, Math.round(totalStudents * (1 - scoreRatio) * 0.75));
+  return Math.max(1, Math.round(totalStudents * (1 - scoreRatio) * 0.9));
+}
