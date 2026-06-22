@@ -1,35 +1,63 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Inspector } from 'react-dev-inspector';
 import './globals.css';
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://yunyanagent.com';
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
+  applicationName: '云研志愿',
   title: {
-    default: '\u0041\u0049\u5fd7\u613f\u586b\u62a5\u52a9\u624b',
-    template: '%s | \u0041\u0049\u5fd7\u613f\u586b\u62a5\u52a9\u624b',
+    default: '云研志愿｜高考志愿 H5 决策助手',
+    template: '%s | 云研志愿',
   },
   description:
-    '\u57fa\u4e8e\u672c\u5730\u5f55\u53d6\u6570\u636e\u3001\u8001\u5e08\u65b9\u6cd5\u8bba\u548c\u0041\u0049\u5206\u6790\u7684\u9ad8\u8003\u5fd7\u613f\u586b\u62a5\u8f85\u52a9\u5de5\u5177\uff0c\u5e2e\u52a9\u8003\u751f\u751f\u6210\u51b2\u7a33\u4fdd\u63a8\u8350\u62a5\u544a\u3002',
-  keywords: [
-    '\u9ad8\u8003\u5fd7\u613f\u586b\u62a5',
-    '\u0041\u0049\u5fd7\u613f\u586b\u62a5',
-    '\u5f55\u53d6\u6570\u636e',
-    '\u51b2\u7a33\u4fdd',
-    '\u9662\u6821\u63a8\u8350',
-  ],
+    '面向手机端和社交平台入口的高考志愿填报辅助工具，基于本地录取数据、选科硬规则和 AI 分析生成冲稳保参考报告。',
+  keywords: ['高考志愿填报', 'AI志愿填报', '高考志愿H5', '录取数据', '冲稳保', '选科要求'],
   authors: [{ name: 'gaokao-admission-agent' }],
   generator: 'Next.js',
+  manifest: '/manifest.webmanifest',
+  icons: {
+    icon: [{ url: '/icon.svg', type: 'image/svg+xml' }],
+    shortcut: '/icon.svg',
+    apple: [{ url: '/icon.svg', type: 'image/svg+xml' }],
+  },
+  appleWebApp: {
+    capable: true,
+    title: '云研志愿',
+    statusBarStyle: 'default',
+  },
+  formatDetection: {
+    telephone: false,
+  },
   openGraph: {
-    title: '\u0041\u0049\u5fd7\u613f\u586b\u62a5\u52a9\u624b',
+    title: '云研志愿｜高考志愿 H5 决策助手',
     description:
-      '\u8f93\u5165\u7701\u4efd\u3001\u5206\u6570\u3001\u4f4d\u6b21\u548c\u4e13\u4e1a\u504f\u597d\uff0c\u57fa\u4e8e\u672c\u5730\u771f\u5b9e\u5f55\u53d6\u6570\u636e\u751f\u6210\u5fd7\u613f\u63a8\u8350\u62a5\u544a\u3002',
-    siteName: '\u0041\u0049\u5fd7\u613f\u586b\u62a5\u52a9\u624b',
+      '输入省份、分数、位次和选科，基于真实录取数据生成冲稳保参考报告，严格拦截选科和专业方向错配。',
+    url: '/',
+    siteName: '云研志愿',
     locale: 'zh_CN',
     type: 'website',
+    images: [{ url: '/icon.svg', width: 512, height: 512, alt: '云研志愿' }],
+  },
+  twitter: {
+    card: 'summary',
+    title: '云研志愿｜高考志愿 H5 决策助手',
+    description: '手机端打开即可生成高考志愿风险预览。',
+    images: ['/icon.svg'],
   },
   robots: {
     index: true,
     follow: true,
   },
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  viewportFit: 'cover',
+  themeColor: '#1e40af',
 };
 
 export default function RootLayout({
@@ -41,7 +69,7 @@ export default function RootLayout({
 
   return (
     <html lang="zh-CN">
-      <body className={`antialiased`}>
+      <body className="antialiased">
         {isDev && <Inspector />}
         {children}
       </body>
