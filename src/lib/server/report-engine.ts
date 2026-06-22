@@ -370,7 +370,8 @@ async function createRecommendation(records: AdmissionRecord[], userProfile: Use
   const hasRankEvidence = userRank > 0 && latest.lowestRank > 0;
   const rankDiff = hasRankEvidence ? latest.lowestRank - userRank : Math.round((userProfile.score - latest.lowestScore) * 1000);
   const trend = calculateRankTrend(records);
-  const recommendationType = classifyRecommendation(rankDiff);
+  const recommendationType = classifyRecommendation(rankDiff, latest.lowestRank, userRank, trend);
+  if (!recommendationType) return null;
   const matchScore = calculateMatchScore(latest, userProfile, rankDiff, trend);
   const riskLevel = assessRisk(rankDiff, trend);
   const university = fallbackUniversity(latest);
@@ -392,10 +393,45 @@ async function createRecommendation(records: AdmissionRecord[], userProfile: Use
   };
 }
 
-function classifyRecommendation(rankDiff: number): RecommendationType {
+interface RankWindow {
+  sprintMax: number;
+  stableMax: number;
+  guaranteeMax: number;
+}
+
+function classifyRecommendation(rankDiff: number, admissionRank: number, userRank: number, trend: number): RecommendationType | null {
+  if (admissionRank <= 0 || userRank <= 0) return classifyScoreFallbackRecommendation(rankDiff);
+  const window = getRankWindow(Math.min(admissionRank, userRank));
+  if (rankDiff < 0) {
+    const overreach = Math.abs(rankDiff);
+    if (overreach > window.sprintMax) return null;
+    if (trend < -5000 && overreach > Math.round(window.sprintMax * 0.65)) return null;
+    return C.sprint;
+  }
+
+  let type: RecommendationType = rankDiff <= window.stableMax ? C.stable : C.guarantee;
+  if (rankDiff > window.guaranteeMax) return null;
+  if (trend < -3000) {
+    if (type === C.guarantee) type = C.stable;
+    else if (type === C.stable) type = C.sprint;
+  }
+  return type;
+}
+
+function classifyScoreFallbackRecommendation(rankDiff: number): RecommendationType | null {
+  if (rankDiff < -15000) return null;
   if (rankDiff < -5000) return C.sprint;
-  if (rankDiff <= 12000) return C.stable;
-  return C.guarantee;
+  if (rankDiff <= 10000) return C.stable;
+  if (rankDiff <= 45000) return C.guarantee;
+  return null;
+}
+
+function getRankWindow(anchorRank: number): RankWindow {
+  if (anchorRank <= 5000) return { sprintMax: 2500, stableMax: 3000, guaranteeMax: 8000 };
+  if (anchorRank <= 10000) return { sprintMax: 4000, stableMax: 5000, guaranteeMax: 12000 };
+  if (anchorRank <= 30000) return { sprintMax: 8000, stableMax: 10000, guaranteeMax: 25000 };
+  if (anchorRank <= 80000) return { sprintMax: 15000, stableMax: 20000, guaranteeMax: 45000 };
+  return { sprintMax: 25000, stableMax: 30000, guaranteeMax: 70000 };
 }
 function calculateRankTrend(records: AdmissionRecord[]): number {
   if (records.length < 2) return 0;
