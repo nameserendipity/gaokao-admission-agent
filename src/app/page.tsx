@@ -21,7 +21,7 @@ export default function Home() {
             专业 · 可信 · 清爽
           </span>
         </div>
-      <div className="max-w-4xl mx-auto px-4 pb-3 text-right"><Link href="/data-disclaimer" className="text-sm text-muted-foreground hover:text-foreground">????</Link></div></header>
+      <div className="max-w-4xl mx-auto px-4 pb-3 text-right"><Link href="/data-disclaimer" className="text-sm text-muted-foreground hover:text-foreground">数据说明</Link></div></header>
 
       {/* Hero Section */}
       <main className="max-w-4xl mx-auto px-4 py-8 md:py-12">
