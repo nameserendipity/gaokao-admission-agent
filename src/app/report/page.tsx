@@ -11,15 +11,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import type { Recommendation, Report, ReportChatMessage, ReportPreviewResponse } from '@/lib/types';
 import { getProvinceLabel } from '@/lib/provinces';
+import { getSubjectCombinationLabel } from '@/lib/subject-rules';
 import { cn } from '@/lib/utils';
-
-const subjectLabel: Record<string, string> = {
-  physics_chemistry: '物理 / 化学',
-  history_politics: '历史 / 政治',
-  physics_history: '物理 / 历史',
-  chemistry_biology: '化学 / 生物',
-  other: '其他组合',
-};
 
 const riskTone = {
   low: 'border-emerald-200 bg-emerald-50 text-emerald-800',
@@ -172,7 +165,7 @@ export default function ReportPage() {
         <section className="mb-6 rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm md:p-8">
           <div className="grid gap-8 lg:grid-cols-[1.35fr_.65fr] lg:items-end">
             <div>
-              <div className="mb-4 flex flex-wrap items-center gap-2"><Badge variant="outline" className="rounded-full border-blue-200 bg-blue-50 text-blue-700">{provinceName}</Badge><Badge variant="outline" className="rounded-full">{report.userProfile.candidateType === 'art' ? '艺术类' : report.userProfile.candidateType === 'sports' ? '体育类' : subjectLabel[report.userProfile.subjectCategory] || report.userProfile.subjectCategory}</Badge>{report.userProfile.artSportsCategory && <Badge variant="outline" className="rounded-full">{report.userProfile.artSportsCategory}</Badge>}<Badge variant="outline" className="rounded-full">报告ID {report.id.slice(-10)}</Badge></div>
+              <div className="mb-4 flex flex-wrap items-center gap-2"><Badge variant="outline" className="rounded-full border-blue-200 bg-blue-50 text-blue-700">{provinceName}</Badge><Badge variant="outline" className="rounded-full">{report.userProfile.candidateType === 'art' ? '艺术类' : report.userProfile.candidateType === 'sports' ? '体育类' : getSubjectCombinationLabel(report.userProfile.subjectCategory)}</Badge>{report.userProfile.artSportsCategory && <Badge variant="outline" className="rounded-full">{report.userProfile.artSportsCategory}</Badge>}<Badge variant="outline" className="rounded-full">报告ID {report.id.slice(-10)}</Badge></div>
               <h1 className="max-w-3xl text-3xl font-semibold tracking-tight text-slate-950 md:text-5xl">{report.userProfile.candidateType === 'art' || report.userProfile.candidateType === 'sports' ? '艺体志愿推荐报告' : '完整志愿推荐报告'}</h1>
               <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">{report.positionAnalysis.positionDescription}</p>
               <div className="mt-5 flex flex-wrap gap-3 print:hidden">
@@ -319,4 +312,3 @@ function stripRawGroupInfo(notes?: string): string | undefined {
   const visible = notes?.split('\uFF1B').filter(item => !item.startsWith('\u539f\u59cb\u4e13\u4e1a\u7ec4\u4fe1\u606f\uFF1A')).join('\uFF1B').trim();
   return visible || undefined;
 }
-

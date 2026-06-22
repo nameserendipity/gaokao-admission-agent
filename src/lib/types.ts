@@ -32,12 +32,21 @@ export type Province =
   | 'ningxia'
   | 'xinjiang';
 
+export type PrimarySubject = 'physics' | 'history';
+export type ElectiveSubject = 'chemistry' | 'biology' | 'politics' | 'geography';
 export type SubjectCategory =
-  | 'physics_chemistry'
-  | 'history_politics'
-  | 'physics_history'
-  | 'chemistry_biology'
-  | 'other';
+  | 'physics_chemistry_biology'
+  | 'physics_chemistry_politics'
+  | 'physics_chemistry_geography'
+  | 'physics_biology_politics'
+  | 'physics_biology_geography'
+  | 'physics_politics_geography'
+  | 'history_chemistry_biology'
+  | 'history_chemistry_politics'
+  | 'history_chemistry_geography'
+  | 'history_biology_politics'
+  | 'history_biology_geography'
+  | 'history_politics_geography';
 
 export type Region = 'east' | 'south' | 'north' | 'west' | 'central' | 'northeast';
 export type FamilyBackground = 'ordinary' | 'well_off' | 'difficult';
@@ -53,6 +62,8 @@ export interface UserProfile {
   professionalScore?: number | null;
   compositeScore?: number | null;
   artSportsCategory?: string | null;
+  primarySubject: PrimarySubject;
+  electiveSubjects: [ElectiveSubject, ElectiveSubject];
   subjectCategory: SubjectCategory;
   preferredMajors: string[];
   excludedMajors: string[];

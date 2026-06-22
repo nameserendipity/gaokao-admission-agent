@@ -133,8 +133,8 @@ function pickTrendTargets(report: Report, question: string) {
 }
 
 function inferTrendCategory(subjectRequirement: Report['recommendations']['stable'][number]['admissionRecord']['subjectRequirement']): string | undefined {
-  if (subjectRequirement.includes('history_politics')) return '历史';
-  if (subjectRequirement.includes('physics_chemistry')) return '物理';
+  if (subjectRequirement.some(item => item.startsWith('history_'))) return '历史';
+  if (subjectRequirement.some(item => item.startsWith('physics_'))) return '物理';
   return undefined;
 }
 

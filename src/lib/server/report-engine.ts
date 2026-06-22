@@ -1,4 +1,3 @@
-﻿
 import type {
   AdmissionRecord,
   CareerGoal,
@@ -13,6 +12,7 @@ import type {
   UserProfile,
 } from '@/lib/types';
 import { getAdmissionsForProfile } from '@/lib/knowledge/admission-source';
+import { filterMajorsBySubject, getAllowedMajorCategories, getAllowedMajorOptions, getSubjectCategoryFromSelection, getSubjectSelection, isMajorAllowedForSubject, isSubjectCategory as isModernSubjectCategory, normalizeSubjectCategory } from '@/lib/subject-rules';
 import { getProvinceLabel, getProvinceMeta, isProvince } from '@/lib/provinces';
 import { searchTeacherKnowledge } from '@/lib/knowledge/teacher-knowledge';
 import { generateDeepSeekSummary } from './deepseek';
@@ -48,8 +48,12 @@ export function validateUserProfile(input: unknown): UserProfile {
   if (candidateType === 'art' && (typeof raw.compositeScore !== 'number' || raw.compositeScore <= 0)) throw new Error('请填写艺术类综合分/投档分。');
   if (candidateType === 'sports' && (typeof raw.professionalScore !== 'number' || raw.professionalScore <= 0)) throw new Error('请填写体育专业分。');
   if (candidateType === 'art' && !isNonEmptyString(raw.artSportsCategory)) throw new Error('请选择艺术类专业类别。');
-  if (candidateType === 'general' && !isSubjectCategory(raw.subjectCategory)) throw new Error('Invalid subject category.');
+  const normalizedSubjectCategory = candidateType === 'general'
+    ? normalizeSubjectCategory(raw.subjectCategory) || getSubjectCategoryFromSelection(raw.primarySubject, raw.electiveSubjects)
+    : 'physics_chemistry_biology';
+  if (!normalizedSubjectCategory) throw new Error('请选择完整的3+1+2选科组合。');
   if (candidateType === 'general' && !isCareerGoal(raw.careerGoal)) throw new Error('Invalid career goal.');
+  const subjectSelection = getSubjectSelection(normalizedSubjectCategory);
 
   return {
     candidateType,
@@ -59,9 +63,11 @@ export function validateUserProfile(input: unknown): UserProfile {
     professionalScore: typeof raw.professionalScore === 'number' ? raw.professionalScore : null,
     compositeScore: typeof raw.compositeScore === 'number' ? raw.compositeScore : null,
     artSportsCategory: isNonEmptyString(raw.artSportsCategory) ? raw.artSportsCategory.trim() : null,
-    subjectCategory: isSubjectCategory(raw.subjectCategory) ? raw.subjectCategory : 'other',
-    preferredMajors: Array.isArray(raw.preferredMajors) ? raw.preferredMajors.filter(isNonEmptyString) : [],
-    excludedMajors: Array.isArray(raw.excludedMajors) ? raw.excludedMajors.filter(isNonEmptyString) : [],
+    primarySubject: subjectSelection.primarySubject,
+    electiveSubjects: subjectSelection.electiveSubjects,
+    subjectCategory: subjectSelection.subjectCategory,
+    preferredMajors: filterMajorsBySubject(Array.isArray(raw.preferredMajors) ? raw.preferredMajors.filter(isNonEmptyString) : [], subjectSelection.subjectCategory),
+    excludedMajors: filterMajorsBySubject(Array.isArray(raw.excludedMajors) ? raw.excludedMajors.filter(isNonEmptyString) : [], subjectSelection.subjectCategory),
     preferredRegions: Array.isArray(raw.preferredRegions) ? raw.preferredRegions.filter(isRegion) : [],
     familyBackground: raw.familyBackground === 'well_off' || raw.familyBackground === 'difficult' ? raw.familyBackground : 'ordinary',
     careerGoal: isCareerGoal(raw.careerGoal) ? raw.careerGoal : 'flexible',
@@ -125,7 +131,7 @@ export async function generateServerReport(userProfile: UserProfile): Promise<Re
 }
 
 function isSubjectCategory(value: unknown): value is SubjectCategory {
-  return ['physics_chemistry', 'history_politics', 'physics_history', 'chemistry_biology', 'other'].includes(String(value));
+  return isModernSubjectCategory(value);
 }
 function isCareerGoal(value: unknown): value is CareerGoal {
   return ['employment', 'postgraduate', 'stable', 'flexible'].includes(String(value));
@@ -154,23 +160,23 @@ function estimateRankFromScore(userProfile: UserProfile): number {
 }
 
 function determineSuitableMajors(userProfile: UserProfile): Report['suitableMajors'] {
-  const recommendedCategories = [...new Set([...getMajorCategoriesBySubject(userProfile.subjectCategory), ...getMajorCategoriesByCareerGoal(userProfile.careerGoal)])];
+  const allowedOptions = getAllowedMajorOptions(userProfile.subjectCategory);
+  const allowedCategories = getAllowedMajorCategories(userProfile.subjectCategory);
+  const careerCategories = getMajorCategoriesByCareerGoal(userProfile.careerGoal).filter(category => allowedCategories.includes(category));
+  const recommendedCategories = [...new Set([...allowedCategories, ...careerCategories])];
   const excludedCategories = userProfile.excludedMajors.map(getMajorCategory);
   return recommendedCategories
     .filter(category => !excludedCategories.includes(category))
-    .map(category => ({ category, majors: getMajorsByCategory(category, userProfile.preferredMajors), reasons: generateCategoryReasons(category, userProfile) }))
+    .map(category => {
+      const preferredInCategory = userProfile.preferredMajors.filter(major => getMajorCategory(major) === category);
+      const majors = preferredInCategory.length > 0 ? preferredInCategory : allowedOptions.filter(option => option.category === category).map(option => option.name);
+      return { category, majors, reasons: generateCategoryReasons(category, userProfile) };
+    })
     .filter(item => item.majors.length > 0);
 }
 
 function getMajorCategoriesBySubject(subject: SubjectCategory): string[] {
-  const categories: Record<SubjectCategory, string[]> = {
-    physics_chemistry: [C.engineering, C.science, C.medicine],
-    history_politics: [C.literature, C.law, C.management, C.economics],
-    physics_history: [C.engineering, C.science, C.literature, C.economics],
-    chemistry_biology: [C.medicine, C.engineering, C.agriculture, C.science],
-    other: [C.engineering, C.science, C.literature, C.management, C.economics],
-  };
-  return categories[subject] || [];
+  return getAllowedMajorCategories(subject);
 }
 
 function getMajorCategoriesByCareerGoal(goal: CareerGoal): string[] {
@@ -193,7 +199,7 @@ function getMajorCategory(majorName: string): string {
     ['\u7ba1\u7406', C.management], ['\u4f1a\u8ba1', C.management], ['\u8d22\u52a1', C.management],
     ['\u6570\u5b66', C.science], ['\u7269\u7406', C.science], ['\u5316\u5b66', C.science], ['\u5fc3\u7406', C.science], ['\u6d77\u6d0b', C.science],
   ];
-  return categoryMap.find(([key]) => majorName.includes(key))?.[1] || C.engineering;
+  return categoryMap.find(([key]) => majorName.includes(key))?.[1] || C.management;
 }
 
 function getMajorsByCategory(category: string, preferredMajors: string[]): string[] {
@@ -225,7 +231,7 @@ function filterAdmissions(admissions: AdmissionRecord[], userProfile: UserProfil
   const suitableCategories = suitableMajors.map(item => item.category);
   const userRank = userProfile.rank || estimateRankFromScore(userProfile);
   return admissions.filter(record => {
-    const subjectMatch = record.subjectRequirement.some(req => req === userProfile.subjectCategory || userProfile.subjectCategory === 'other');
+    const subjectMatch = isMajorAllowedForSubject(record.majorName, userProfile.subjectCategory);
     const majorMatch = userProfile.preferredMajors.length === 0 || isRelatedToPreferences(record, userProfile) || suitableCategories.includes(record.majorCategory);
     const notExcluded = !userProfile.excludedMajors.some(excluded => record.majorName.includes(excluded) || getMajorCategory(record.majorName) === getMajorCategory(excluded));
     const scoreWindow = record.lowestScore <= 0 || Math.abs(record.lowestScore - userProfile.score) <= 80;
@@ -237,7 +243,7 @@ function filterAdmissions(admissions: AdmissionRecord[], userProfile: UserProfil
 function buildRelaxedAdmissions(admissions: AdmissionRecord[], userProfile: UserProfile): AdmissionRecord[] {
   const userRank = userProfile.rank || estimateRankFromScore(userProfile);
   return admissions.filter(record => {
-    const subjectMatch = record.subjectRequirement.some(req => req === userProfile.subjectCategory || req === 'other' || req === 'physics_history' || userProfile.subjectCategory === 'other');
+    const subjectMatch = isMajorAllowedForSubject(record.majorName, userProfile.subjectCategory);
     const notExcluded = !userProfile.excludedMajors.some(excluded => record.majorName.includes(excluded) || getMajorCategory(record.majorName) === getMajorCategory(excluded));
     const scoreWindow = record.lowestScore <= 0 || Math.abs(record.lowestScore - userProfile.score) <= 140;
     const rankWindow = Math.abs(record.lowestRank - userRank) <= 160000 || record.lowestRank > userRank;
@@ -248,7 +254,7 @@ function buildRelaxedAdmissions(admissions: AdmissionRecord[], userProfile: User
 function buildBroadAdmissions(admissions: AdmissionRecord[], userProfile: UserProfile): AdmissionRecord[] {
   const userRank = userProfile.rank || estimateRankFromScore(userProfile);
   return admissions.filter(record => {
-    const subjectMatch = record.subjectRequirement.some(req => req === userProfile.subjectCategory || req === 'other' || req === 'physics_history' || userProfile.subjectCategory === 'other');
+    const subjectMatch = isMajorAllowedForSubject(record.majorName, userProfile.subjectCategory);
     const notExcluded = !userProfile.excludedMajors.some(excluded => record.majorName.includes(excluded) || getMajorCategory(record.majorName) === getMajorCategory(excluded));
     const scoreWindow = record.lowestScore <= 0 || Math.abs(record.lowestScore - userProfile.score) <= 180;
     const rankWindow = record.lowestRank <= 0 || Math.abs(record.lowestRank - userRank) <= 240000 || record.lowestRank > userRank;

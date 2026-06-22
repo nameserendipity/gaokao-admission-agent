@@ -1,3 +1,4 @@
+import { getAllowedMajorCategories, isMajorAllowedForSubject } from './subject-rules';
 import type {
   UserProfile,
   AdmissionRecord,
@@ -146,14 +147,7 @@ function determineSuitableMajors(userProfile: UserProfile): Report['suitableMajo
  * 根据选科类型获取适合的专业类别
  */
 function getMajorCategoriesBySubject(subject: SubjectCategory): string[] {
-  const categories: Record<SubjectCategory, string[]> = {
-    'physics_chemistry': ['工学', '理学', '医学'],
-    'history_politics': ['文学', '法学', '管理学', '经济学'],
-    'physics_history': ['工学', '理学', '文学', '经济学'],
-    'chemistry_biology': ['医学', '工学', '农学', '理学'],
-    'other': ['工学', '理学', '文学', '管理学', '经济学']
-  };
-  return categories[subject] || [];
+  return getAllowedMajorCategories(subject);
 }
 
 /**
@@ -260,9 +254,7 @@ function filterAdmissions(
 
   return admissions.filter(record => {
     // 1. 选科要求匹配
-    const subjectMatch = record.subjectRequirement.some(req =>
-      req === userProfile.subjectCategory || userProfile.subjectCategory === 'other'
-    );
+    const subjectMatch = isMajorAllowedForSubject(record.majorName, userProfile.subjectCategory);
 
     // 2. 专业偏好匹配
     const majorMatch =

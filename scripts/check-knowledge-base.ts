@@ -12,7 +12,7 @@ async function main() {
     province: 'zhejiang',
     score: 666,
     rank: 12000,
-    subjectCategory: 'physics_chemistry',
+    subjectCategory: 'physics_chemistry_biology',
     preferredMajors: [],
     excludedMajors: [],
     limit: 20,
