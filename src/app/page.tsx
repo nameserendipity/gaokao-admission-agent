@@ -82,7 +82,7 @@ export default function Home() {
             </div>
             <div className="flex flex-col gap-4">
               <h1 className="max-w-3xl text-4xl font-black leading-[1.05] tracking-tight text-slate-950 sm:text-5xl md:text-6xl">
-                给家长一个更稳的志愿填报起点
+                给自己一个更稳的志愿
               </h1>
               <p className="max-w-2xl text-base leading-7 text-muted-foreground sm:text-lg">
                 输入省份、分数、位次和选科组合，系统基于本地真实录取数据生成冲稳保参考报告，并严格拦截选科冲突和专业方向错配。

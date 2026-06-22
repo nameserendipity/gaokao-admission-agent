@@ -4,7 +4,6 @@ import {
   ArrowRight,
   CheckCircle2,
   ClipboardCheck,
-  MessageCircle,
   ShieldCheck,
 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -53,7 +52,6 @@ export default function SharePage() {
         <section className="rounded-[2rem] border bg-white p-5 shadow-xl shadow-slate-200/70">
           <div className="flex flex-col gap-4">
             <div className="flex flex-wrap gap-2">
-              <Badge className="rounded-full">家长先看版</Badge>
               <Badge variant="outline" className="rounded-full">
                 无需注册
               </Badge>
@@ -114,18 +112,6 @@ export default function SharePage() {
           </AlertDescription>
         </Alert>
 
-        <section className="rounded-[2rem] border bg-white p-5 text-center shadow-sm">
-          <div className="mx-auto mb-3 flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-            <MessageCircle />
-          </div>
-          <h2 className="text-xl font-black tracking-tight">可以直接转发给家长或学生</h2>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            这一页就是平台承接页，后续可挂到公众号菜单、微信群、小红书主页、抖音企业号或小程序入口。
-          </p>
-          <Button className="mt-5 h-11 rounded-full px-6" asChild>
-            <Link href="/input">开始填写</Link>
-          </Button>
-        </section>
       </div>
     </main>
   );
