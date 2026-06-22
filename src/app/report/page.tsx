@@ -297,12 +297,13 @@ function RecommendationCard({ rec }: { rec: Recommendation }) {
         <div>
           <p className="mb-2 text-xs font-medium text-slate-500">{'\u6570\u636e\u8bc1\u636e'}</p>
           <div className="space-y-1.5">
-            {(rec.evidence || []).slice(0, 2).map(item => <p key={`${item.year}-${item.lowestRank}`} className="text-xs leading-5 text-slate-500">{item.year}{'\u5e74 \u00b7 '}{item.lowestScore}{'\u5206 \u00b7 '}{item.lowestRank || '-'}{'\u4f4d \u00b7 '}{item.sourceName}</p>)}
+            {(rec.evidence || []).slice(0, 2).map(item => <p key={`${item.year}-${item.lowestRank}`} className="text-xs leading-5 text-slate-500">{item.year}{'\u5e74 \u00b7 '}{isSportsRecommendation ? `\u4f53\u80b2\u4e13\u4e1a\u6295\u6863\u5206 ${item.lowestScore}` : `${item.lowestScore}\u5206`}{' \u00b7 '}{isSportsRecommendation ? `\u4f53\u80b2\u6295\u6863\u6392\u540d ${item.lowestRank || '-'}` : `${item.lowestRank || '-'}\u4f4d`}{' \u00b7 '}{item.sourceName}</p>)}
             {rawGroupInfo && <p className="text-xs leading-5 text-slate-500">{'\u539f\u59cb\u4e13\u4e1a\u7ec4\uff1a'}{rawGroupInfo}</p>}
           </div>
         </div>
       </div>
       {rec.major.name === '\u9662\u6821\u4e13\u4e1a\u7ec4' && <p className="mt-3 rounded-xl bg-blue-50 p-3 text-xs leading-5 text-blue-800">{'\u8be5\u6761\u4e3a\u9662\u6821\u4e13\u4e1a\u7ec4\u6295\u6863\u7ebf\uff0c\u4e0d\u80fd\u76f4\u63a5\u7b49\u540c\u4e8e\u67d0\u4e00\u4e2a\u5177\u4f53\u4e13\u4e1a\u3002\u6b63\u5f0f\u586b\u62a5\u524d\u8bf7\u6838\u5bf9\u62db\u751f\u8ba1\u5212\u4e2d\u7684\u7ec4\u5185\u4e13\u4e1a\u3001\u9009\u79d1\u8981\u6c42\u548c\u6821\u533a\u3002'}</p>}
+      {isSportsRecommendation && <p className="mt-3 rounded-xl bg-blue-50 p-3 text-xs leading-5 text-blue-800">{'\u672c\u63a8\u8350\u6309\u6c5f\u897f\u4f53\u80b2\u7c7b\u516c\u5f00\u7684\u4f53\u80b2\u4e13\u4e1a\u6295\u6863\u5206\u548c\u4f53\u80b2\u6295\u6863\u6392\u540d\u5339\u914d\uff0c\u4e0d\u4f7f\u7528\u666e\u901a\u7c7b\u7efc\u5408\u5206\u6a21\u578b\uff1b\u6587\u5316\u5206\u662f\u5426\u8fc7\u7ebf\u9700\u53e6\u884c\u6838\u9a8c\u3002'}</p>}
       {rec.riskNotes && <p className="mt-3 rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-800">{rec.riskNotes}</p>}
     </div>
   );

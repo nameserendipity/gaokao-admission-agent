@@ -147,6 +147,7 @@ function toRecommendation(record: ArtSportsCandidate, userProfile: UserProfile, 
     reasons: [
       `你的${scoreLabel} ${scoreForMatch}，${scoreDiff >= 0 ? '高于' : '低于'}该专业组${record.year}年投档线约 ${Math.abs(scoreDiff).toFixed(3)} 分。`,
       `匹配类别：${record.category}；院校专业组：${record.groupCode}${record.groupName ? ` ${record.groupName}` : ''}。`,
+      userProfile.candidateType === 'sports' ? '\u5f53\u524d\u6309\u6c5f\u897f\u4f53\u80b2\u7c7b\u516c\u5f00\u7684\u4f53\u80b2\u4e13\u4e1a\u6295\u6863\u5206\u548c\u4f53\u80b2\u6295\u6863\u6392\u540d\u5339\u914d\uff0c\u4e0d\u4f7f\u7528\u666e\u901a\u7c7b\u7efc\u5408\u5206\u6a21\u578b\u3002' : '\u5f53\u524d\u6309\u827a\u672f\u7c7b\u7efc\u5408\u5206/\u6295\u6863\u5206\u53e3\u5f84\u5339\u914d\u3002',
       record.filingRank ? `该专业组${record.year}年投档最低排名为 ${record.filingRank}。` : `该条数据未提供投档最低排名，优先按${userProfile.candidateType === 'sports' ? '体育专业投档分' : '综合分'}差值参考。`,
       userProfile.rank && record.filingRank ? `你的${userProfile.candidateType === 'sports' ? '体育投档排名' : '艺体排名'}与该专业组投档最低排名相差约 ${Math.abs(record.filingRank - userProfile.rank)} 名。` : `若补充${userProfile.candidateType === 'sports' ? '体育投档排名' : '艺体综合分排名/投档排名'}，风险判断会更精细。`,
     ],
