@@ -16,10 +16,22 @@ TARGETS = [
 
 NOISE_WORDS = ['江西省教育考试院']
 
+def fix_mojibake(text):
+    # Some PDFs expose GBK bytes as Latin-1 characters, e.g. ???? -> ??.
+    if not text or not re.search(r'[????????????????????????????????????]', text):
+        return text
+    try:
+        repaired = text.encode('latin1').decode('gbk')
+        if re.search(r'[\u4e00-\u9fff]', repaired):
+            return repaired
+    except UnicodeError:
+        pass
+    return text
+
 def clean(value):
     if value is None:
         return ''
-    text = str(value).replace('\n', '').replace('\r', '').strip()
+    text = fix_mojibake(str(value)).replace('\n', '').replace('\r', '').strip()
     for word in NOISE_WORDS:
         text = text.replace(word, '')
     return text.strip()
