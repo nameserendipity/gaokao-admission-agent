@@ -13,7 +13,7 @@ import type {
 } from '@/lib/types';
 import { getAdmissionsForProfile } from '@/lib/knowledge/admission-source';
 import { estimateRankFromAdmissionDb } from '@/lib/knowledge/admission-sqlite';
-import { filterMajorsBySubject, getAllowedMajorCategories, getAllowedMajorOptions, getSubjectCategoryFromSelection, getSubjectSelection, isMajorAllowedForSubject, isSubjectCategory as isModernSubjectCategory, normalizeSubjectCategory } from '@/lib/subject-rules';
+import { filterMajorsBySubject, getAllowedMajorCategories, getAllowedMajorOptions, getSubjectCategoryFromSelection, getSubjectSelection, isAdmissionRecordAllowedForSubject, isMajorAllowedForSubject, isSubjectCategory as isModernSubjectCategory, normalizeSubjectCategory } from '@/lib/subject-rules';
 import { getProvinceLabel, getProvinceMeta, isProvince } from '@/lib/provinces';
 import { searchTeacherKnowledge } from '@/lib/knowledge/teacher-knowledge';
 import { generateDeepSeekSummary } from './deepseek';
@@ -222,7 +222,7 @@ function filterAdmissions(admissions: AdmissionRecord[], userProfile: UserProfil
   const suitableCategories = suitableMajors.map(item => item.category);
   const userRank = userProfile.rank || 0;
   return admissions.filter(record => {
-    const subjectMatch = isMajorAllowedForSubject(record.majorName, userProfile.subjectCategory);
+    const subjectMatch = isAdmissionRecordAllowedForSubject(record, userProfile.subjectCategory);
     const majorMatch = userProfile.preferredMajors.length === 0 || isRelatedToPreferences(record, userProfile) || suitableCategories.includes(record.majorCategory);
     const notExcluded = !userProfile.excludedMajors.some(excluded => record.majorName.includes(excluded) || getMajorCategory(record.majorName) === getMajorCategory(excluded));
     const scoreWindow = record.lowestScore <= 0 || Math.abs(record.lowestScore - userProfile.score) <= 80;
@@ -234,7 +234,7 @@ function filterAdmissions(admissions: AdmissionRecord[], userProfile: UserProfil
 function buildRelaxedAdmissions(admissions: AdmissionRecord[], userProfile: UserProfile): AdmissionRecord[] {
   const userRank = userProfile.rank || 0;
   return admissions.filter(record => {
-    const subjectMatch = isMajorAllowedForSubject(record.majorName, userProfile.subjectCategory);
+    const subjectMatch = isAdmissionRecordAllowedForSubject(record, userProfile.subjectCategory);
     const notExcluded = !userProfile.excludedMajors.some(excluded => record.majorName.includes(excluded) || getMajorCategory(record.majorName) === getMajorCategory(excluded));
     const scoreWindow = record.lowestScore <= 0 || Math.abs(record.lowestScore - userProfile.score) <= 140;
     const rankWindow = userRank <= 0 || record.lowestRank <= 0 || Math.abs(record.lowestRank - userRank) <= 160000 || record.lowestRank > userRank;
@@ -245,7 +245,7 @@ function buildRelaxedAdmissions(admissions: AdmissionRecord[], userProfile: User
 function buildBroadAdmissions(admissions: AdmissionRecord[], userProfile: UserProfile): AdmissionRecord[] {
   const userRank = userProfile.rank || 0;
   return admissions.filter(record => {
-    const subjectMatch = isMajorAllowedForSubject(record.majorName, userProfile.subjectCategory);
+    const subjectMatch = isAdmissionRecordAllowedForSubject(record, userProfile.subjectCategory);
     const notExcluded = !userProfile.excludedMajors.some(excluded => record.majorName.includes(excluded) || getMajorCategory(record.majorName) === getMajorCategory(excluded));
     const scoreWindow = record.lowestScore <= 0 || Math.abs(record.lowestScore - userProfile.score) <= 180;
     const rankWindow = userRank <= 0 || record.lowestRank <= 0 || Math.abs(record.lowestRank - userRank) <= 240000 || record.lowestRank > userRank;

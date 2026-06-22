@@ -4,7 +4,7 @@ import initSqlJs, { Database, SqlJsStatic } from 'sql.js';
 import type { AdmissionRecord, Province, SubjectCategory } from '@/lib/types';
 import { getProvinceMeta, isProvince, PROVINCES } from '@/lib/provinces';
 import type { AdmissionEvidence, KnowledgeSearchInput, KnowledgeSearchResult } from './types';
-import { inferSubjectCategoriesFromRequirement, isAdmissionRequirementAllowedForSubject, isMajorAllowedForSubject, SUBJECT_COMBINATIONS } from '@/lib/subject-rules';
+import { inferSubjectCategoriesFromRequirement, isAdmissionRequirementAllowedForSubject, isAdmissionRecordAllowedForSubject, SUBJECT_COMBINATIONS } from '@/lib/subject-rules';
 
 const DB_PATH = process.env.ADMISSION_DB_PATH || path.join(process.cwd(), 'data', 'admission_clean.db');
 const PROVINCE_NAME: Record<Province, string> = Object.fromEntries(PROVINCES.map(province => [province.value, province.dbName])) as Record<Province, string>;
@@ -131,7 +131,13 @@ export async function searchAdmissionKnowledge(input: KnowledgeSearchInput): Pro
   if (rows.length > 0 && rows.every(row => !row.rank || row.rank <= 0)) warnings.push('\u5f53\u524d\u7701\u4efd\u539f\u59cb\u6570\u636e\u7f3a\u5c11\u4f4d\u6b21\u5b57\u6bb5\uff0c\u672c\u6b21\u4f18\u5148\u6309\u5206\u6570\u5dee\u5339\u914d\uff1b\u5efa\u8bae\u7ed3\u5408\u5b98\u65b9\u4e00\u5206\u4e00\u6bb5\u8868\u590d\u6838\u3002');
   if (rows.length > 0 && rows.every(row => !row.score || row.score <= 0)) warnings.push('\u5f53\u524d\u7701\u4efd\u539f\u59cb\u6570\u636e\u7f3a\u5c11\u5206\u6570\u5b57\u6bb5\uff0c\u62a5\u544a\u5c06\u4f18\u5148\u4f7f\u7528\u4f4d\u6b21\u8bc1\u636e\u3002');
   if (!hasReliableRank) warnings.push('\u672a\u586b\u5199\u4f4d\u6b21\uff0c\u7cfb\u7edf\u672a\u4f7f\u7528\u7c97\u7565\u516c\u5f0f\u4f30\u7b97\uff1b\u672c\u6b21\u4f18\u5148\u6309\u540c\u7701\u540c\u9009\u79d1\u5206\u6570\u7a97\u53e3\u5339\u914d\u3002');
-  const records = rows.map(row => toEvidence(row, input)).filter(item => subjectRoughlyMatches(item, input.subjectCategory)).slice(0, limit);
+  let records = rows.map(row => toEvidence(row, input)).filter(item => subjectRoughlyMatches(item, input.subjectCategory)).slice(0, limit);
+  if (hasReliableRank && records.length < Math.min(8, limit)) {
+    warnings.push('位次窗口内与用户选科组合严格匹配的记录偏少，已改用分数窗口补充；首选科目、再选科目和专业方向边界未放宽。');
+    const scoreFallbackParams: (string | number)[] = [provinceName, input.score - 140, input.score + 140, ...excludeClause.params];
+    const scoreRows = selectRows<AdmissionRow>(db, `select ${selectColumns} from ${searchTable} where province = ? and score is not null and score > 0 and score between ? and ? ${excludeClause.sql} order by ${scoreOrder} limit ${queryLimit}`, scoreFallbackParams);
+    records = scoreRows.map(row => toEvidence(row, input)).filter(item => subjectRoughlyMatches(item, input.subjectCategory)).slice(0, limit);
+  }
   return { records, source: 'sqlite', warnings };
 }
 
@@ -468,8 +474,8 @@ function inferMajorCategory(majorName: string): string { if (/\u8ba1\u7b97\u673a
 function inferSchoolLevel(schoolName: string): AdmissionEvidence['schoolLevel'] { const level985 = ['\u6e05\u534e\u5927\u5b66', '\u5317\u4eac\u5927\u5b66', '\u6d59\u6c5f\u5927\u5b66', '\u590d\u65e6\u5927\u5b66', '\u4e0a\u6d77\u4ea4\u901a\u5927\u5b66', '\u5357\u4eac\u5927\u5b66', '\u5c71\u4e1c\u5927\u5b66', '\u4e2d\u56fd\u6d77\u6d0b\u5927\u5b66']; const level211 = ['\u5317\u4eac\u90ae\u7535\u5927\u5b66', '\u4e0a\u6d77\u8d22\u7ecf\u5927\u5b66', '\u4e2d\u592e\u8d22\u7ecf\u5927\u5b66', '\u4e2d\u56fd\u653f\u6cd5\u5927\u5b66', '\u5357\u4eac\u7406\u5de5\u5927\u5b66', '\u82cf\u5dde\u5927\u5b66']; if (level985.some(name => schoolName.includes(name))) return '985'; if (level211.some(name => schoolName.includes(name))) return '211'; if (/\u5927\u5b66|\u5b66\u9662/.test(schoolName)) return 'ordinary'; return 'vocational'; }
 function subjectRoughlyMatches(item: AdmissionEvidence, subject: SubjectCategory): boolean {
   const explicit = isAdmissionRequirementAllowedForSubject(`${item.category} ${item.batch} ${item.majorName}`, subject);
-  if (typeof explicit === 'boolean') return explicit;
-  return isMajorAllowedForSubject(item.majorName, subject);
+  if (typeof explicit === 'boolean' && !explicit) return false;
+  return isAdmissionRecordAllowedForSubject({ majorName: item.majorName, subjectRequirement: item.subjectRequirement }, subject);
 }
 function stableCode(value: string): string { let hash = 0; for (const char of value) hash = (hash * 31 + char.charCodeAt(0)) >>> 0; return `sch-${hash.toString(16)}`; }
 

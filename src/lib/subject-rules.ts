@@ -1,4 +1,4 @@
-import type { ElectiveSubject, PrimarySubject, SubjectCategory } from './types';
+import type { AdmissionRecord, ElectiveSubject, PrimarySubject, SubjectCategory } from './types';
 
 export const PRIMARY_SUBJECT_OPTIONS: { value: PrimarySubject; label: string; desc: string }[] = [
   { value: 'physics', label: '\u7269\u7406\u7ec4', desc: '\u4ee5\u7269\u7406\u4e3a\u9996\u9009\u79d1\u76ee\uff0c\u4fdd\u7559\u7406\u5de5\u533b\u548c\u90e8\u5206\u7ecf\u7ba1\u65b9\u5411\u3002' },
@@ -29,13 +29,16 @@ const M = {
   literature: '\u6587\u5b66', economics: '\u7ecf\u6d4e\u5b66', management: '\u7ba1\u7406\u5b66', engineering: '\u5de5\u5b66', science: '\u7406\u5b66', medicine: '\u533b\u5b66', law: '\u6cd5\u5b66', history: '\u5386\u53f2\u5b66',
 };
 
-const GENERAL_OPTIONS: MajorOption[] = [
-  { name: '\u6c49\u8bed\u8a00\u6587\u5b66(\u5e08\u8303)', aliases: ['\u6c49\u8bed\u8a00\u6587\u5b66', '\u4e2d\u6587', '\u5e08\u8303'], category: M.literature },
-  { name: '\u82f1\u8bed(\u5e08\u8303)', aliases: ['\u82f1\u8bed', '\u5916\u56fd\u8bed\u8a00', '\u5e08\u8303'], category: M.literature },
+const CROSS_TRACK_OPTIONS: MajorOption[] = [
   { name: '\u7ecf\u6d4e\u5b66', aliases: ['\u7ecf\u6d4e\u5b66', '\u7ecf\u6d4e\u7edf\u8ba1'], category: M.economics },
   { name: '\u91d1\u878d\u5b66', aliases: ['\u91d1\u878d\u5b66', '\u91d1\u878d\u5de5\u7a0b'], category: M.economics },
   { name: '\u4f1a\u8ba1\u5b66', aliases: ['\u4f1a\u8ba1\u5b66', '\u8d22\u52a1\u7ba1\u7406', '\u5ba1\u8ba1\u5b66'], category: M.management },
   { name: '\u516c\u5171\u4e8b\u4e1a\u7ba1\u7406', aliases: ['\u516c\u5171\u4e8b\u4e1a\u7ba1\u7406', '\u884c\u653f\u7ba1\u7406', '\u516c\u5171\u7ba1\u7406'], category: M.management },
+];
+
+const HISTORY_ONLY_OPTIONS: MajorOption[] = [
+  { name: '\u6c49\u8bed\u8a00\u6587\u5b66(\u5e08\u8303)', aliases: ['\u6c49\u8bed\u8a00\u6587\u5b66', '\u4e2d\u6587', '\u5e08\u8303'], category: M.literature },
+  { name: '\u82f1\u8bed(\u5e08\u8303)', aliases: ['\u82f1\u8bed', '\u5916\u56fd\u8bed\u8a00', '\u7ffb\u8bd1'], category: M.literature },
 ];
 
 const PHYSICS_CHEMISTRY_OPTIONS: MajorOption[] = [
@@ -78,10 +81,44 @@ export function getSubjectCategoryFromSelection(primary: PrimarySubject | undefi
 export function getSubjectSelection(subjectCategory: SubjectCategory): SubjectSelection { const [primary, first, second] = subjectCategory.split('_') as [PrimarySubject, ElectiveSubject, ElectiveSubject]; return { primarySubject: primary, electiveSubjects: [first, second], subjectCategory }; }
 export function normalizeSubjectCategory(raw: unknown): SubjectCategory | undefined { if (isSubjectCategory(raw)) return raw; if (raw === 'physics_chemistry') return 'physics_chemistry_biology'; if (raw === 'history_politics') return 'history_politics_geography'; return undefined; }
 export function getSubjectCombinationLabel(subjectCategory: SubjectCategory | string): string { const normalized = normalizeSubjectCategory(subjectCategory); if (!normalized) return '\u672a\u9009\u62e9\u9009\u79d1\u7ec4\u5408'; const [primary, first, second] = normalized.split('_') as [PrimarySubject, ElectiveSubject, ElectiveSubject]; return `${SUBJECT_LABEL[primary]} / ${SUBJECT_LABEL[first]} / ${SUBJECT_LABEL[second]}`; }
-export function getAllowedMajorOptions(subjectCategory: SubjectCategory): MajorOption[] { const isPhysics = subjectCategory.startsWith('physics'); const hasChemistry = includesElective(subjectCategory, 'chemistry'); const hasPolitics = includesElective(subjectCategory, 'politics'); if (isPhysics && hasChemistry) return uniqueOptions([...PHYSICS_CHEMISTRY_OPTIONS, ...GENERAL_OPTIONS, ...(hasPolitics ? POLITICS_OPTIONS : [LAW_OPTION])]); if (isPhysics) return uniqueOptions([...PHYSICS_NON_CHEMISTRY_OPTIONS, ...GENERAL_OPTIONS, ...(hasPolitics ? POLITICS_OPTIONS : [LAW_OPTION])]); return uniqueOptions([...HISTORY_CORE_OPTIONS, ...GENERAL_OPTIONS, ...(hasPolitics ? POLITICS_OPTIONS : [LAW_OPTION])]); }
+export function getAllowedMajorOptions(subjectCategory: SubjectCategory): MajorOption[] { const isPhysics = subjectCategory.startsWith('physics'); const hasChemistry = includesElective(subjectCategory, 'chemistry'); const hasPolitics = includesElective(subjectCategory, 'politics'); if (isPhysics && hasChemistry) return uniqueOptions([...PHYSICS_CHEMISTRY_OPTIONS, ...CROSS_TRACK_OPTIONS, ...(hasPolitics ? [LAW_OPTION] : [LAW_OPTION])]); if (isPhysics) return uniqueOptions([...PHYSICS_NON_CHEMISTRY_OPTIONS, ...CROSS_TRACK_OPTIONS, LAW_OPTION]); return uniqueOptions([...HISTORY_CORE_OPTIONS, ...HISTORY_ONLY_OPTIONS, ...CROSS_TRACK_OPTIONS, ...(hasPolitics ? POLITICS_OPTIONS : [LAW_OPTION])]); }
 export function getAllowedMajorNames(subjectCategory: SubjectCategory): string[] { return getAllowedMajorOptions(subjectCategory).map(option => option.name); }
 export function getAllowedMajorCategories(subjectCategory: SubjectCategory): string[] { return [...new Set(getAllowedMajorOptions(subjectCategory).map(option => option.category))]; }
-export function isMajorAllowedForSubject(majorName: string, subjectCategory: SubjectCategory): boolean { const text = majorName.trim(); if (!text) return false; if (/\u9662\u6821\u4e13\u4e1a\u7ec4|\u672a\u6ce8\u660e\u4e13\u4e1a/.test(text)) return true; return getAllowedMajorOptions(subjectCategory).some(option => option.aliases.some(alias => text.includes(alias) || alias.includes(text))); }
+export function isMajorAllowedForSubject(majorName: string, subjectCategory: SubjectCategory): boolean { const decision = evaluateMajorSubjectBoundary(majorName, subjectCategory); return decision.allowed; }
+
+
+export type MajorTrack = 'physics_only' | 'history_only' | 'cross_track' | 'unknown';
+export interface MajorSubjectDecision { allowed: boolean; track: MajorTrack; reason?: string; }
+
+const PHYSICS_ONLY_RE = /计算机|软件|人工智能|电子信息|通信工程|微电子|电气|自动化|机械|车辆工程|智能制造|材料|土木|建筑环境|数学|物理|化学|生物科学|统计|数据科学|网络工程|临床|口腔|医学|药学|医学技术|预防医学|农学|园艺|动物医学/;
+const HISTORY_ONLY_RE = /汉语言|中文|历史学|哲学|新闻|传播|广告学|政治学|马克思|思想政治教育|文物|博物馆|外国语言文学|英语\(师范\)|纯文|文史/;
+const CROSS_TRACK_RE = /会计|财务|审计|经济|金融|工商管理|市场营销|国际经济与贸易|物流管理|电子商务|法学|知识产权|教育学|心理学|地理科学|公共管理|行政管理|公共事业管理/;
+
+export function classifyMajorTrack(majorName: string): MajorTrack {
+  const text = majorName.trim();
+  if (!text || /院校专业组|未注明专业/.test(text)) return 'unknown';
+  if (PHYSICS_ONLY_RE.test(text)) return 'physics_only';
+  if (HISTORY_ONLY_RE.test(text)) return 'history_only';
+  if (CROSS_TRACK_RE.test(text)) return 'cross_track';
+  return 'unknown';
+}
+
+export function evaluateMajorSubjectBoundary(majorName: string, subjectCategory: SubjectCategory): MajorSubjectDecision {
+  const selection = getSubjectSelection(subjectCategory);
+  const track = classifyMajorTrack(majorName);
+  if (track === 'unknown') return { allowed: false, track, reason: '专业方向无法保守判断' };
+  if (selection.primarySubject === 'history' && track === 'physics_only') return { allowed: false, track, reason: '历史组不得推荐理工医农主干专业' };
+  if (selection.primarySubject === 'physics' && track === 'history_only') return { allowed: false, track, reason: '物理组不得推荐纯文史哲新传马理类专业' };
+  return { allowed: true, track };
+}
+
+export function isAdmissionRecordAllowedForSubject(record: Pick<AdmissionRecord, 'majorName' | 'subjectRequirement'>, subjectCategory: SubjectCategory): boolean {
+  // 保守推荐硬规则：宁可少推，不可错推；任何 fallback 都不能绕过原始选科要求和专业方向边界。
+  const requirement = Array.isArray(record.subjectRequirement) ? record.subjectRequirement : [];
+  if (requirement.length > 0 && !requirement.includes(subjectCategory)) return false;
+  return evaluateMajorSubjectBoundary(record.majorName, subjectCategory).allowed;
+}
+
 export function filterMajorsBySubject(majors: string[], subjectCategory: SubjectCategory | undefined): string[] { if (!subjectCategory) return []; return majors.filter(major => isMajorAllowedForSubject(major, subjectCategory)); }
 
 export function inferSubjectCategoriesFromRequirement(text: string): SubjectCategory[] | undefined {
