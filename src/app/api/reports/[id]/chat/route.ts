@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getReportById, getReportMessages, saveReportMessages } from '@/lib/db/repository';
 import { answerReportQuestion } from '@/lib/server/deepseek';
-import type { ReportChatMessage } from '@/lib/types';
+import type { Report, ReportChatMessage } from '@/lib/types';
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -15,9 +15,10 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const report = await getReportById(id);
+    const body = (await request.json()) as { question?: unknown; report?: unknown };
+    const cachedReport = await getReportById(id);
+    const report = cachedReport || coerceClientReport(body.report, id);
     if (!report) return NextResponse.json({ error: '报告不存在或已过期' }, { status: 404 });
-    const body = (await request.json()) as { question?: unknown };
     if (typeof body.question !== 'string' || body.question.trim().length === 0) {
       return NextResponse.json({ error: '问题不能为空' }, { status: 400 });
     }
@@ -34,4 +35,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const message = error instanceof Error ? error.message : '追问失败';
     return NextResponse.json({ error: message }, { status: 400 });
   }
+}
+
+function coerceClientReport(input: unknown, reportId: string): Report | null {
+  if (!input || typeof input !== 'object') return null;
+  const report = input as Partial<Report>;
+  if (report.id !== reportId) return null;
+  if (!report.userProfile || !report.recommendations || !report.positionAnalysis || !report.disclaimer) return null;
+  return report as Report;
 }

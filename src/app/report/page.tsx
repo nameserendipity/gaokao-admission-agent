@@ -51,7 +51,7 @@ export default function ReportPage() {
       try {
         const response = await fetch(`/api/reports/${reportId}`);
         const payload = (await response.json()) as Partial<ReportPreviewResponse> & { error?: string };
-        if (!response.ok || !payload.report) throw new Error(payload.error || '报告读取失败');
+        if (!response.ok || !payload.report) throw new Error(payload.error || '报告不存在或已过期');
         setReport(payload.report);
         sessionStorage.setItem('report', JSON.stringify(payload.report));
 
@@ -66,7 +66,7 @@ export default function ReportPage() {
           setError(null);
           return;
         }
-        setError(err instanceof Error ? err.message : '\u62a5\u544a\u8bfb\u53d6\u5931\u8d25');
+        setError(err instanceof Error ? err.message : '报告读取失败');
       }
     };
     void load();
@@ -86,7 +86,7 @@ export default function ReportPage() {
       const response = await fetch(`/api/reports/${reportId}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question }),
+        body: JSON.stringify({ question, report }),
       });
       const payload = (await response.json()) as { messages?: ReportChatMessage[]; error?: string };
       if (!response.ok || !payload.messages) throw new Error(payload.error || '追问失败');
