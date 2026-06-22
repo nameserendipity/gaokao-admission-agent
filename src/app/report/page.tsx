@@ -140,6 +140,7 @@ export default function ReportPage() {
 
   if (!report) return null;
   const provinceName = getProvinceLabel(report.userProfile.province);
+  const rankLabel = report.positionAnalysis.rank > 0 ? String(report.positionAnalysis.rank) : '\u672a\u586b\u5199\uff08\u6309\u5206\u6570\u5339\u914d\uff09';
   const isArtSportsReport = report.userProfile.candidateType === 'art' || report.userProfile.candidateType === 'sports';
   const topRisk = report.riskDiagnosis?.find(item => item.level === 'high') || report.riskDiagnosis?.[0];
   const noPreferenceMode = report.userProfile.preferredMajors.length === 0 && report.userProfile.preferredRegions.length === 0;
@@ -174,7 +175,7 @@ export default function ReportPage() {
                 <Button onClick={handlePrint} className="rounded-full bg-blue-700 px-5 text-white hover:bg-blue-800">{'\u6253\u5370 / \u4fdd\u5b58PDF'}</Button>
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-3 rounded-3xl bg-slate-50 p-3"><Metric label="分数" value={String(report.userProfile.score)} /><Metric label="位次" value={String(report.positionAnalysis.rank)} /><Metric label="推荐" value={String(allRecommendations.length)} /></div>
+            <div className="grid grid-cols-3 gap-3 rounded-3xl bg-slate-50 p-3"><Metric label="分数" value={String(report.userProfile.score)} /><Metric label="位次" value={rankLabel} /><Metric label="推荐" value={String(allRecommendations.length)} /></div>
           </div>
         </section>
 

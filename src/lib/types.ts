@@ -165,6 +165,7 @@ export interface Report {
     score: number;
     rank: number;
     rankEstimated?: boolean;
+    rankEstimateMethod?: 'user' | 'admission_db' | 'score_only';
     rankPercentile: number;
     positionDescription: string;
   };

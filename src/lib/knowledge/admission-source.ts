@@ -41,11 +41,18 @@ export async function getAdmissionsForProfile(input: KnowledgeSearchInput): Prom
 
 async function searchBalancedAdmissionKnowledge(input: KnowledgeSearchInput) {
   const rank = input.rank;
-  const segments = [
-    { name: 'sprint', rank: Math.max(1, rank - 10000), score: input.score + 8, limit: 90 },
-    { name: 'stable', rank, score: input.score, limit: 110 },
-    { name: 'guarantee', rank: rank + 18000, score: input.score - 18, limit: 90 },
-  ];
+  const hasReliableRank = rank > 0;
+  const segments = hasReliableRank
+    ? [
+      { name: 'sprint', rank: Math.max(1, rank - 10000), score: input.score + 8, limit: 90 },
+      { name: 'stable', rank, score: input.score, limit: 110 },
+      { name: 'guarantee', rank: rank + 18000, score: input.score - 18, limit: 90 },
+    ]
+    : [
+      { name: 'sprint', rank: 0, score: input.score + 12, limit: 120 },
+      { name: 'stable', rank: 0, score: input.score, limit: 140 },
+      { name: 'guarantee', rank: 0, score: input.score - 25, limit: 120 },
+    ];
   const results = await Promise.all(segments.map(segment => searchAdmissionKnowledge({
     ...input,
     rank: segment.rank,

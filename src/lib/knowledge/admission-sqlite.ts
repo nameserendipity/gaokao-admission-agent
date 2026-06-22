@@ -93,38 +93,72 @@ export async function searchAdmissionKnowledge(input: KnowledgeSearchInput): Pro
   const idColumn = searchTable === 'recommendation_records' ? 'admission_id' : 'id';
   const selectColumns = `${idColumn} as id, province, year, category, batch, school_name, major_name, score, rank, quota, source_file`;
   const provinceName = PROVINCE_NAME[input.province];
-  if (!provinceName) throw new Error(`暂不支持该省份：${input.province}`);
+  if (!provinceName) throw new Error(`\u6682\u4e0d\u652f\u6301\u8be5\u7701\u4efd\uff1a${input.province}`);
   const limit = Math.max(20, Math.min(input.limit ?? 160, 800));
-  const rankWindow = calculateRankWindow(input.rank);
+  const queryLimit = Math.min(2400, Math.max(limit * 8, limit));
+  const hasReliableRank = input.rank > 0;
+  const rankWindow = hasReliableRank ? calculateRankWindow(input.rank) : 0;
   const scoreWindow = 80;
   const excludeClause = buildExcludeClause(input.excludedMajors);
   const primaryOrder = input.balancedYears
     ? `case when rank is not null and rank > 0 then abs(rank - ${Math.round(input.rank)}) else 999999999 end asc, case when score is not null and score > 0 then abs(score - ${Math.round(input.score)}) else 999999999 end asc, year desc`
     : `year desc, case when rank is not null and rank > 0 then abs(rank - ${Math.round(input.rank)}) else 999999999 end asc, case when score is not null and score > 0 then abs(score - ${Math.round(input.score)}) else 999999999 end asc`;
   const scoreOrder = input.balancedYears
-    ? `abs(score - ${Math.round(input.score)}) asc, year desc, rank asc`
-    : `year desc, abs(score - ${Math.round(input.score)}) asc, rank asc`;
+    ? `abs(score - ${Math.round(input.score)}) asc, year desc, case when rank is null or rank <= 0 then 1 else 0 end, rank asc`
+    : `year desc, abs(score - ${Math.round(input.score)}) asc, case when rank is null or rank <= 0 then 1 else 0 end, rank asc`;
   const rankOrder = input.balancedYears
     ? `abs(rank - ${Math.round(input.rank)}) asc, year desc`
     : `year desc, abs(rank - ${Math.round(input.rank)}) asc`;
-  const params: (string | number)[] = [provinceName, input.rank + rankWindow, input.rank - rankWindow, input.score - scoreWindow, input.score + scoreWindow];
-  const sql = `select ${selectColumns} from ${searchTable} where province = ? and ((rank is not null and rank > 0 and rank <= ? and rank >= ?) or (score is not null and score > 0 and score between ? and ?)) ${excludeClause.sql} order by ${primaryOrder} limit ${limit}`;
+  const params: (string | number)[] = hasReliableRank
+    ? [provinceName, input.rank + rankWindow, input.rank - rankWindow, input.score - scoreWindow, input.score + scoreWindow]
+    : [provinceName, input.score - scoreWindow, input.score + scoreWindow];
+  const sql = hasReliableRank
+    ? `select ${selectColumns} from ${searchTable} where province = ? and ((rank is not null and rank > 0 and rank <= ? and rank >= ?) or (score is not null and score > 0 and score between ? and ?)) ${excludeClause.sql} order by ${primaryOrder} limit ${queryLimit}`
+    : `select ${selectColumns} from ${searchTable} where province = ? and score is not null and score > 0 and score between ? and ? ${excludeClause.sql} order by ${scoreOrder} limit ${queryLimit}`;
   params.push(...excludeClause.params);
   let rows = selectRows<AdmissionRow>(db, sql, params);
   const warnings: string[] = [];
   if (rows.length < 40) {
-    warnings.push('\u672c\u5730\u6570\u636e\u5e93\u6309\u4f4d\u6b21\u7a97\u53e3\u547d\u4e2d\u8f83\u5c11\uff0c\u5df2\u6269\u5927\u68c0\u7d22\u8303\u56f4\u3002');
+    warnings.push('\u672c\u5730\u6570\u636e\u5e93\u6309\u5f53\u524d\u7a97\u53e3\u547d\u4e2d\u8f83\u5c11\uff0c\u5df2\u6269\u5927\u68c0\u7d22\u8303\u56f4\u3002');
     const broadParams: (string | number)[] = [provinceName, input.score - 120, input.score + 120, ...excludeClause.params];
-    rows = selectRows<AdmissionRow>(db, `select ${selectColumns} from ${searchTable} where province = ? and rank is not null and score is not null and score between ? and ? ${excludeClause.sql} order by ${scoreOrder} limit ${limit}`, broadParams);
+    rows = selectRows<AdmissionRow>(db, `select ${selectColumns} from ${searchTable} where province = ? and score is not null and score > 0 and score between ? and ? ${excludeClause.sql} order by ${scoreOrder} limit ${queryLimit}`, broadParams);
   }
-  if (rows.length < 20) {
-    warnings.push('当前省份分数证据不足，已使用位次数据补充匹配。');
+  if (hasReliableRank && rows.length < 20) {
+    warnings.push('\u5f53\u524d\u7701\u4efd\u5206\u6570\u8bc1\u636e\u4e0d\u8db3\uff0c\u5df2\u4f7f\u7528\u4f4d\u6b21\u6570\u636e\u8865\u5145\u5339\u914d\u3002');
     const rankOnlyParams: (string | number)[] = [provinceName, input.rank + rankWindow, input.rank - rankWindow, ...excludeClause.params];
-    rows = selectRows<AdmissionRow>(db, `select ${selectColumns} from ${searchTable} where province = ? and rank is not null and rank <= ? and rank >= ? ${excludeClause.sql} order by ${rankOrder} limit ${limit}`, rankOnlyParams);
+    rows = selectRows<AdmissionRow>(db, `select ${selectColumns} from ${searchTable} where province = ? and rank is not null and rank <= ? and rank >= ? ${excludeClause.sql} order by ${rankOrder} limit ${queryLimit}`, rankOnlyParams);
   }
-  if (rows.length > 0 && rows.every(row => !row.rank || row.rank <= 0)) warnings.push('当前省份原始数据缺少位次字段，系统已按分数估算位次用于排序，建议结合官方一分一段表复核。');
-  if (rows.length > 0 && rows.every(row => !row.score || row.score <= 0)) warnings.push('当前省份原始数据缺少分数字段，报告将优先使用位次证据。');
-  return { records: rows.map(row => toEvidence(row, input)).filter(item => subjectRoughlyMatches(item, input.subjectCategory)), source: 'sqlite', warnings };
+  if (rows.length > 0 && rows.every(row => !row.rank || row.rank <= 0)) warnings.push('\u5f53\u524d\u7701\u4efd\u539f\u59cb\u6570\u636e\u7f3a\u5c11\u4f4d\u6b21\u5b57\u6bb5\uff0c\u672c\u6b21\u4f18\u5148\u6309\u5206\u6570\u5dee\u5339\u914d\uff1b\u5efa\u8bae\u7ed3\u5408\u5b98\u65b9\u4e00\u5206\u4e00\u6bb5\u8868\u590d\u6838\u3002');
+  if (rows.length > 0 && rows.every(row => !row.score || row.score <= 0)) warnings.push('\u5f53\u524d\u7701\u4efd\u539f\u59cb\u6570\u636e\u7f3a\u5c11\u5206\u6570\u5b57\u6bb5\uff0c\u62a5\u544a\u5c06\u4f18\u5148\u4f7f\u7528\u4f4d\u6b21\u8bc1\u636e\u3002');
+  if (!hasReliableRank) warnings.push('\u672a\u586b\u5199\u4f4d\u6b21\uff0c\u7cfb\u7edf\u672a\u4f7f\u7528\u7c97\u7565\u516c\u5f0f\u4f30\u7b97\uff1b\u672c\u6b21\u4f18\u5148\u6309\u540c\u7701\u540c\u9009\u79d1\u5206\u6570\u7a97\u53e3\u5339\u914d\u3002');
+  const records = rows.map(row => toEvidence(row, input)).filter(item => subjectRoughlyMatches(item, input.subjectCategory)).slice(0, limit);
+  return { records, source: 'sqlite', warnings };
+}
+
+export async function estimateRankFromAdmissionDb(input: Pick<KnowledgeSearchInput, 'province' | 'score' | 'subjectCategory'>): Promise<number | null> {
+  const db = await getDatabase();
+  const searchTable = getAdmissionSearchTable(db);
+  const idColumn = searchTable === 'recommendation_records' ? 'admission_id' : 'id';
+  const selectColumns = `${idColumn} as id, province, year, category, batch, school_name, major_name, score, rank, quota, source_file`;
+  const provinceName = PROVINCE_NAME[input.province];
+  if (!provinceName) return null;
+  const windows = [10, 20, 40, 80];
+  for (const scoreWindow of windows) {
+    const rows = selectRows<AdmissionRow>(
+      db,
+      `select ${selectColumns} from ${searchTable} where province = ? and score is not null and rank is not null and rank > 0 and score between ? and ? order by abs(score - ?) asc, year desc limit 1200`,
+      [provinceName, input.score - scoreWindow, input.score + scoreWindow, input.score],
+    );
+    const ranks = rows
+      .map(row => toEvidence(row, { province: input.province, score: input.score, rank: 0, subjectCategory: input.subjectCategory, preferredMajors: [], excludedMajors: [], limit: 1200 }))
+      .filter(item => subjectRoughlyMatches(item, input.subjectCategory))
+      .map(item => item.rank)
+      .filter(rank => rank > 0)
+      .sort((a, b) => a - b);
+    if (ranks.length >= 3) return ranks[Math.floor(ranks.length / 2)];
+    if (ranks.length > 0 && scoreWindow >= 40) return ranks[Math.floor(ranks.length / 2)];
+  }
+  return null;
 }
 
 export async function searchArtSportsAdmissions(input: {
@@ -410,7 +444,7 @@ function toEvidence(row: AdmissionRow, input: KnowledgeSearchInput): AdmissionEv
   const rawMajorName = row.major_name || '\u672a\u6ce8\u660e\u4e13\u4e1a';
   const displayMajorName = normalizeDisplayMajorName(rawMajorName);
   const score = row.score || 0;
-  const rank = row.rank && row.rank > 0 ? row.rank : estimateRankFromScore(province, score, input);
+  const rank = row.rank && row.rank > 0 ? row.rank : 0;
   return { id: `sqlite-${row.id}`, source: 'sqlite', province, provinceName: row.province, year: row.year, category: row.category || '\u672a\u6ce8\u660e\u7c7b\u522b', batch: row.batch || '\u672a\u6ce8\u660e\u6279\u6b21', schoolName: row.school_name, majorName: rawMajorName, score, rank, quota: row.quota || undefined, sourceFile: row.source_file || undefined, subjectRequirement: inferSubjectRequirement(row.category || '', rawMajorName, displayMajorName), majorCategory: inferMajorCategory(displayMajorName), schoolLevel: inferSchoolLevel(row.school_name) };
 }
 
