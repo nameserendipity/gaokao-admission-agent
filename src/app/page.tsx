@@ -42,7 +42,6 @@ const features = [
   },
 ];
 
-const steps = ['选择省份与考生类型', '填写分数、位次和选科', '选择专业与地区偏好', '生成预览报告'];
 
 export default function Home() {
   return (
@@ -188,34 +187,6 @@ export default function Home() {
               );
             })}
           </div>
-        </section>
-
-        <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
-          <Card className="rounded-[2rem] border-primary/10 bg-primary text-primary-foreground shadow-xl shadow-primary/15">
-            <CardContent className="grid gap-6 p-6 md:grid-cols-[0.9fr_1.1fr] md:p-8">
-              <div className="flex flex-col gap-3">
-                <Badge variant="secondary" className="w-fit rounded-full">
-                  4 步完成预览
-                </Badge>
-                <h2 className="text-2xl font-black tracking-tight sm:text-3xl">
-                  从视频、群聊点进来，也能快速完成测评
-                </h2>
-                <p className="text-sm leading-6 text-primary-foreground/80">
-                  适合投放、私域社群、公众号菜单和家长转发场景。
-                </p>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {steps.map((step, index) => (
-                  <div key={step} className="rounded-2xl bg-white/10 p-4 ring-1 ring-white/15">
-                    <div className="mb-3 flex size-8 items-center justify-center rounded-full bg-white text-sm font-black text-primary">
-                      {index + 1}
-                    </div>
-                    <div className="font-semibold">{step}</div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
         </section>
 
         <section className="mx-auto max-w-6xl px-4 pb-12 pt-6 sm:px-6 md:pb-16">
