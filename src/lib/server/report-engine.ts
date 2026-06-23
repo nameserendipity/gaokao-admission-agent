@@ -377,11 +377,13 @@ async function createRecommendation(records: AdmissionRecord[], userProfile: Use
   const latest = records[0];
   if (!latest) return null;
   const hasRankEvidence = userRank > 0 && latest.lowestRank > 0;
+  const hasUserProvidedRank = Boolean(userProfile.rank);
+  const scoreDiff = userProfile.score - latest.lowestScore;
   const rankDiff = hasRankEvidence ? latest.lowestRank - userRank : Math.round((userProfile.score - latest.lowestScore) * 1000);
   const trend = calculateRankTrend(records);
-  const recommendationType = classifyRecommendation(rankDiff, latest.lowestRank, userRank, trend);
+  const recommendationType = classifyRecommendation(rankDiff, latest.lowestRank, userRank, trend, scoreDiff, hasUserProvidedRank);
   if (!recommendationType) return null;
-  const matchScore = calculateMatchScore(latest, userProfile, rankDiff, trend);
+  const matchScore = adjustMatchScoreForEstimatedRank(calculateMatchScore(latest, userProfile, rankDiff, trend), recommendationType, scoreDiff, hasUserProvidedRank);
   const riskLevel = assessRisk(rankDiff, trend);
   const university = fallbackUniversity(latest);
   const major = fallbackMajor(latest);
@@ -408,7 +410,8 @@ interface RankWindow {
   guaranteeMax: number;
 }
 
-function classifyRecommendation(rankDiff: number, admissionRank: number, userRank: number, trend: number): RecommendationType | null {
+function classifyRecommendation(rankDiff: number, admissionRank: number, userRank: number, trend: number, scoreDiff: number, hasUserProvidedRank: boolean): RecommendationType | null {
+  if (!hasUserProvidedRank) return classifyEstimatedRankRecommendation(scoreDiff, trend);
   if (admissionRank <= 0 || userRank <= 0) return classifyScoreFallbackRecommendation(rankDiff);
   const window = getRankWindow(Math.min(admissionRank, userRank));
   if (rankDiff < 0) {
@@ -420,6 +423,19 @@ function classifyRecommendation(rankDiff: number, admissionRank: number, userRan
 
   let type: RecommendationType = rankDiff <= window.stableMax ? C.stable : C.guarantee;
   if (rankDiff > window.guaranteeMax) return null;
+  if (trend < -3000) {
+    if (type === C.guarantee) type = C.stable;
+    else if (type === C.stable) type = C.sprint;
+  }
+  return type;
+}
+
+function classifyEstimatedRankRecommendation(scoreDiff: number, trend: number): RecommendationType | null {
+  if (scoreDiff < -10) return null;
+  if (scoreDiff < 0) return C.sprint;
+
+  let type: RecommendationType = scoreDiff <= 15 ? C.stable : C.guarantee;
+  if (scoreDiff > 45) return null;
   if (trend < -3000) {
     if (type === C.guarantee) type = C.stable;
     else if (type === C.stable) type = C.sprint;
@@ -462,6 +478,12 @@ function calculateMatchScore(record: AdmissionRecord, userProfile: UserProfile, 
   if (trend < -3000) score -= 4;
   score += calculateStrategyAdjustment(record, userProfile, rankDiff, preferenceScore, isHighLevelSchool);
   return Math.max(1, Math.min(100, Math.round(score)));
+}
+function adjustMatchScoreForEstimatedRank(score: number, type: RecommendationType, scoreDiff: number, hasUserProvidedRank: boolean): number {
+  if (hasUserProvidedRank) return score;
+  if (type === C.sprint) return Math.min(score, scoreDiff < 0 ? 78 : 82);
+  if (type === C.stable && scoreDiff <= 5) return Math.min(score, 88);
+  return score;
 }
 function calculateStrategyAdjustment(record: AdmissionRecord, userProfile: UserProfile, rankDiff: number, preferenceScore: number, isHighLevelSchool: boolean): number {
   const mode = userProfile.strategyMode || 'safe';
@@ -534,7 +556,7 @@ function assessRisk(rankDiff: number, trend: number): 'low' | 'medium' | 'high' 
 function generateRecommendationReasons(record: AdmissionRecord, userProfile: UserProfile, rankDiff: number, trend: number, isOpportunity: boolean): string[] {
   const reasons: string[] = [];
   if (userProfile.rank && record.lowestRank > 0) reasons.push(`\u53c2\u8003${record.year}\u5e74\u6700\u4f4e\u4f4d\u6b21${record.lowestRank}\uff0c\u4e0e\u4f60\u7684\u4f4d\u6b21\u5dee\u7ea6${Math.abs(rankDiff)}\u540d`);
-  else reasons.push(`\u53c2\u8003${record.year}\u5e74\u6700\u4f4e\u5206${record.lowestScore}\uff0c\u4e0e\u4f60\u7684\u5206\u6570\u5dee\u7ea6${Math.abs(userProfile.score - record.lowestScore)}\u5206`);
+  else reasons.push(`\u53c2\u8003${record.year}\u5e74\u6700\u4f4e\u5206${record.lowestScore}\uff0c${formatScoreDiffReason(userProfile.score - record.lowestScore)}`);
   if (trend > 0) reasons.push(`\u8fd1\u5e74\u5f55\u53d6\u6700\u4f4e\u4f4d\u6b21\u6709\u653e\u5bbd\u8d8b\u52bf\uff0c\u8f83\u4e0a\u4e00\u5e74\u589e\u52a0\u7ea6${trend}\u540d`);
   if (trend < 0) reasons.push(`\u8fd1\u5e74\u5f55\u53d6\u6700\u4f4e\u4f4d\u6b21\u6709\u6536\u7d27\u8d8b\u52bf\uff0c\u8f83\u4e0a\u4e00\u5e74\u6536\u7d27\u7ea6${Math.abs(trend)}\u540d`);
   if (isDirectPreferenceMatch(record, userProfile)) reasons.push('\u5339\u914d\u4f60\u7684\u4e13\u4e1a\u504f\u597d');
@@ -543,6 +565,11 @@ function generateRecommendationReasons(record: AdmissionRecord, userProfile: Use
   if (strategyReason) reasons.push(strategyReason);
   if (isOpportunity) reasons.push('\u5386\u53f2\u4f4d\u6b21\u6ce2\u52a8\u63d0\u4f9b\u4e86\u4e00\u5b9a\u6361\u6f0f\u7a7a\u95f4\uff0c\u4f46\u9700\u8981\u63a7\u5236\u98ce\u9669');
   return reasons;
+}
+function formatScoreDiffReason(scoreDiff: number): string {
+  if (scoreDiff > 0) return `\u4f60\u9ad8\u51fa\u8be5\u7ebf\u7ea6${scoreDiff}\u5206`;
+  if (scoreDiff < 0) return `\u8be5\u7ebf\u9ad8\u51fa\u4f60\u7ea6${Math.abs(scoreDiff)}\u5206`;
+  return '\u4e0e\u4f60\u5206\u6570\u6301\u5e73';
 }
 function getStrategyReason(record: AdmissionRecord, userProfile: UserProfile, rankDiff: number): string | undefined {
   const mode = userProfile.strategyMode || 'safe';

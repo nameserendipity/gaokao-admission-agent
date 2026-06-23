@@ -201,9 +201,9 @@ export default function ReportPage() {
                   </div>
                 )}
                 <div className="mt-6 space-y-8">
-                  <RecommendationSection title={'\u51b2\u523a'} description={'\u4e89\u53d6\u4e0a\u9650\uff0c\u98ce\u9669\u6700\u9ad8'} tone="blue" items={report.recommendations.sprint} />
-                  <RecommendationSection title={'\u7a33\u59a5'} description={'\u4e3b\u4f53\u9009\u62e9\uff0c\u4f18\u5148\u4fdd\u8bc1\u5339\u914d'} tone="emerald" items={report.recommendations.stable} />
-                  <RecommendationSection title={'\u4fdd\u5e95'} description={'\u9632\u6b62\u6ed1\u6863\uff0c\u5fc5\u987b\u53ef\u63a5\u53d7'} tone="amber" items={report.recommendations.guarantee} />
+                  <RecommendationSection title={'\u51b2\u523a'} description={'\u4e89\u53d6\u4e0a\u9650\uff0c\u98ce\u9669\u6700\u9ad8'} tone="blue" items={report.recommendations.sprint} userScore={report.userProfile.score} rankEstimated={Boolean(report.positionAnalysis.rankEstimated)} />
+                  <RecommendationSection title={'\u7a33\u59a5'} description={'\u4e3b\u4f53\u9009\u62e9\uff0c\u4f18\u5148\u4fdd\u8bc1\u5339\u914d'} tone="emerald" items={report.recommendations.stable} userScore={report.userProfile.score} rankEstimated={Boolean(report.positionAnalysis.rankEstimated)} />
+                  <RecommendationSection title={'\u4fdd\u5e95'} description={'\u9632\u6b62\u6ed1\u6863\uff0c\u5fc5\u987b\u53ef\u63a5\u53d7'} tone="amber" items={report.recommendations.guarantee} userScore={report.userProfile.score} rankEstimated={Boolean(report.positionAnalysis.rankEstimated)} />
                 </div>
               </CardContent>
             </Card>
@@ -235,7 +235,7 @@ function SectionTitle({ title, subtitle, compact = false }: { title: string; sub
   );
 }
 
-function RecommendationSection({ title, description, tone, items }: { title: string; description: string; tone: 'blue' | 'emerald' | 'amber'; items: Recommendation[] }) {
+function RecommendationSection({ title, description, tone, items, userScore, rankEstimated }: { title: string; description: string; tone: 'blue' | 'emerald' | 'amber'; items: Recommendation[]; userScore: number; rankEstimated: boolean }) {
   const toneClass = tone === 'blue' ? 'bg-blue-50 text-blue-700 border-blue-200' : tone === 'emerald' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200';
   return (
     <section>
@@ -249,13 +249,13 @@ function RecommendationSection({ title, description, tone, items }: { title: str
       {items.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">{'\u6682\u65e0'}{title}{'\u63a8\u8350\u3002\u5efa\u8bae\u6269\u5927\u4e13\u4e1a\u3001\u5730\u57df\u6216\u4f4d\u6b21\u7a97\u53e3\u540e\u91cd\u65b0\u751f\u6210\u3002'}</div>
       ) : (
-        <div className="grid gap-3">{items.map((rec, idx) => <RecommendationCard key={`${rec.university.code}-${rec.major.name}-${idx}`} rec={rec} />)}</div>
+        <div className="grid gap-3">{items.map((rec, idx) => <RecommendationCard key={`${rec.university.code}-${rec.major.name}-${idx}`} rec={rec} userScore={userScore} rankEstimated={rankEstimated} />)}</div>
       )}
     </section>
   );
 }
 
-function RecommendationCard({ rec }: { rec: Recommendation }) {
+function RecommendationCard({ rec, userScore, rankEstimated }: { rec: Recommendation; userScore: number; rankEstimated: boolean }) {
   const isArtSports = rec.admissionRecord.id.startsWith('art-sports-');
   const isSportsRecommendation = isArtSports && rec.admissionRecord.majorCategory.includes('\u4f53\u80b2');
   const artSportsScoreLabel = isSportsRecommendation ? '\u4f53\u80b2\u4e13\u4e1a\u6295\u6863\u5206' : '\u6295\u6863\u7efc\u5408\u5206';
@@ -278,7 +278,7 @@ function RecommendationCard({ rec }: { rec: Recommendation }) {
             <span>{rec.admissionRecord.year}{'\u5e74'}</span>
             <span>{isArtSports ? artSportsScoreLabel : '\u6700\u4f4e\u5206'} {rec.admissionRecord.lowestScore}</span>
             <span>{isArtSports ? artSportsRankLabel : '\u6700\u4f4e\u4f4d\u6b21'} {rec.admissionRecord.lowestRank || '-'}</span>
-            {!isArtSports && <span>{'\u4f4d\u6b21\u5dee'} {rec.rankDiff ?? '-'}</span>}
+            {!isArtSports && <span>{rankEstimated ? '\u8f83\u6700\u4f4e\u5206' : '\u4f4d\u6b21\u5dee'} {rankEstimated ? formatScoreDiff(userScore - rec.admissionRecord.lowestScore) : rec.rankDiff ?? '-'}</span>}
             <span>{'\u53c2\u8003\u6982\u7387'} {rec.admissionChance ?? '-'}%</span>
             {isArtSports && visibleNotes && <span>{visibleNotes}</span>}
           </div>
@@ -307,6 +307,12 @@ function RecommendationCard({ rec }: { rec: Recommendation }) {
       {rec.riskNotes && <p className="mt-3 rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-800">{rec.riskNotes}</p>}
     </div>
   );
+}
+
+function formatScoreDiff(scoreDiff: number): string {
+  if (scoreDiff > 0) return `\u9ad8${scoreDiff}\u5206`;
+  if (scoreDiff < 0) return `\u4f4e${Math.abs(scoreDiff)}\u5206`;
+  return '\u6301\u5e73';
 }
 
 function extractRawGroupInfo(notes?: string): string | undefined {
