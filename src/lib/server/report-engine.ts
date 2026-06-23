@@ -411,7 +411,6 @@ interface RankWindow {
 }
 
 function classifyRecommendation(rankDiff: number, admissionRank: number, userRank: number, trend: number, scoreDiff: number, hasUserProvidedRank: boolean): RecommendationType | null {
-  if (!hasUserProvidedRank) return classifyEstimatedRankRecommendation(scoreDiff, trend);
   if (admissionRank <= 0 || userRank <= 0) return classifyScoreFallbackRecommendation(rankDiff);
   const window = getRankWindow(Math.min(admissionRank, userRank));
   if (rankDiff < 0) {
@@ -427,19 +426,12 @@ function classifyRecommendation(rankDiff: number, admissionRank: number, userRan
     if (type === C.guarantee) type = C.stable;
     else if (type === C.stable) type = C.sprint;
   }
-  return type;
+  return hasUserProvidedRank ? type : applyEstimatedRankScoreGuard(type, scoreDiff);
 }
 
-function classifyEstimatedRankRecommendation(scoreDiff: number, trend: number): RecommendationType | null {
+function applyEstimatedRankScoreGuard(type: RecommendationType, scoreDiff: number): RecommendationType | null {
   if (scoreDiff < -10) return null;
   if (scoreDiff < 0) return C.sprint;
-
-  let type: RecommendationType = scoreDiff <= 15 ? C.stable : C.guarantee;
-  if (scoreDiff > 45) return null;
-  if (trend < -3000) {
-    if (type === C.guarantee) type = C.stable;
-    else if (type === C.stable) type = C.sprint;
-  }
   return type;
 }
 
@@ -556,6 +548,7 @@ function assessRisk(rankDiff: number, trend: number): 'low' | 'medium' | 'high' 
 function generateRecommendationReasons(record: AdmissionRecord, userProfile: UserProfile, rankDiff: number, trend: number, isOpportunity: boolean): string[] {
   const reasons: string[] = [];
   if (userProfile.rank && record.lowestRank > 0) reasons.push(`\u53c2\u8003${record.year}\u5e74\u6700\u4f4e\u4f4d\u6b21${record.lowestRank}\uff0c\u4e0e\u4f60\u7684\u4f4d\u6b21\u5dee\u7ea6${Math.abs(rankDiff)}\u540d`);
+  else if (record.lowestRank > 0 && rankDiff !== 0) reasons.push(`\u53c2\u8003${record.year}\u5e74\u6700\u4f4e\u4f4d\u6b21${record.lowestRank}\uff0c\u6309\u5206\u6570\u4f30\u7b97\u4f4d\u6b21\u5dee\u7ea6${Math.abs(rankDiff)}\u540d\uff1b${formatScoreDiffReason(userProfile.score - record.lowestScore)}`);
   else reasons.push(`\u53c2\u8003${record.year}\u5e74\u6700\u4f4e\u5206${record.lowestScore}\uff0c${formatScoreDiffReason(userProfile.score - record.lowestScore)}`);
   if (trend > 0) reasons.push(`\u8fd1\u5e74\u5f55\u53d6\u6700\u4f4e\u4f4d\u6b21\u6709\u653e\u5bbd\u8d8b\u52bf\uff0c\u8f83\u4e0a\u4e00\u5e74\u589e\u52a0\u7ea6${trend}\u540d`);
   if (trend < 0) reasons.push(`\u8fd1\u5e74\u5f55\u53d6\u6700\u4f4e\u4f4d\u6b21\u6709\u6536\u7d27\u8d8b\u52bf\uff0c\u8f83\u4e0a\u4e00\u5e74\u6536\u7d27\u7ea6${Math.abs(trend)}\u540d`);

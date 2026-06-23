@@ -278,7 +278,12 @@ function RecommendationCard({ rec, userScore, rankEstimated }: { rec: Recommenda
             <span>{rec.admissionRecord.year}{'\u5e74'}</span>
             <span>{isArtSports ? artSportsScoreLabel : '\u6700\u4f4e\u5206'} {rec.admissionRecord.lowestScore}</span>
             <span>{isArtSports ? artSportsRankLabel : '\u6700\u4f4e\u4f4d\u6b21'} {rec.admissionRecord.lowestRank || '-'}</span>
-            {!isArtSports && <span>{rankEstimated ? '\u8f83\u6700\u4f4e\u5206' : '\u4f4d\u6b21\u5dee'} {rankEstimated ? formatScoreDiff(userScore - rec.admissionRecord.lowestScore) : rec.rankDiff ?? '-'}</span>}
+            {!isArtSports && (rankEstimated ? (
+              <>
+                <span>{'\u4f30\u7b97\u4f4d\u6b21\u5dee'} {rec.rankDiff ?? '-'}</span>
+                <span>{'\u8f83\u6700\u4f4e\u5206'} {formatScoreDiff(userScore - rec.admissionRecord.lowestScore)}</span>
+              </>
+            ) : <span>{'\u4f4d\u6b21\u5dee'} {rec.rankDiff ?? '-'}</span>)}
             <span>{'\u53c2\u8003\u6982\u7387'} {rec.admissionChance ?? '-'}%</span>
             {isArtSports && visibleNotes && <span>{visibleNotes}</span>}
           </div>
