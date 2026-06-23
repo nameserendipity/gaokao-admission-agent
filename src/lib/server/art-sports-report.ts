@@ -105,8 +105,9 @@ function assembleArtSportsRecommendations(records: ArtSportsCandidate[], userPro
 
 function toRecommendation(record: ArtSportsCandidate, userProfile: UserProfile, scoreForMatch: number): Recommendation {
   const scoreDiff = scoreForMatch - record.filingScore;
+  const rankDiff = userProfile.rank && record.filingRank ? record.filingRank - userProfile.rank : undefined;
   const scoreLabel = getArtSportsScoreLabel(userProfile.candidateType);
-  const recommendationType = classifyByScoreDiff(scoreDiff);
+  const recommendationType = classifyArtSportsRecommendation(userProfile, record, scoreDiff);
   const university: University = {
     code: record.schoolCode || stableCode(record.schoolName),
     name: record.schoolName,
@@ -140,10 +141,10 @@ function toRecommendation(record: ArtSportsCandidate, userProfile: UserProfile, 
     major: { code: record.groupCode, name: `${record.category}专业组`, category: record.category },
     admissionRecord,
     recommendationType,
-    matchScore: calculateScore(scoreDiff, recommendationType),
-    admissionChance: calculateChance(scoreDiff, recommendationType),
-    rankDiff: record.filingRank ? record.filingRank - (userProfile.rank || record.filingRank) : undefined,
-    isOpportunity: scoreDiff >= -3 && scoreDiff <= 5,
+    matchScore: calculateScore(scoreDiff, recommendationType, rankDiff),
+    admissionChance: calculateChance(scoreDiff, recommendationType, rankDiff),
+    rankDiff,
+    isOpportunity: rankDiff !== undefined ? rankDiff >= -50 && rankDiff <= 300 : scoreDiff >= -3 && scoreDiff <= 5,
     reasons: [
       `你的${scoreLabel} ${scoreForMatch}，${scoreDiff >= 0 ? '高于' : '低于'}该专业组${record.year}年投档线约 ${Math.abs(scoreDiff).toFixed(3)} 分。`,
       `匹配类别：${record.category}；院校专业组：${record.groupCode}${record.groupName ? ` ${record.groupName}` : ''}。`,
@@ -167,19 +168,45 @@ function getArtSportsScoreLabel(candidateType: UserProfile['candidateType']): st
   return candidateType === 'sports' ? '\u4f53\u80b2\u7efc\u5408\u5206/\u6295\u6863\u5206' : '\u7efc\u5408\u5206/\u6295\u6863\u5206';
 }
 
+function classifyArtSportsRecommendation(userProfile: UserProfile, record: ArtSportsCandidate, scoreDiff: number): string {
+  if (userProfile.rank && record.filingRank) {
+    const rankDiff = record.filingRank - userProfile.rank;
+    if (rankDiff < 0) return '冲刺';
+    if (rankDiff <= 300) return '稳妥';
+    return '保底';
+  }
+  return classifyByScoreDiff(scoreDiff);
+}
+
 function classifyByScoreDiff(diff: number): string {
   if (diff < 0) return '冲刺';
   if (diff <= 18) return '稳妥';
   return '保底';
 }
 
-function calculateScore(diff: number, type: string): number {
+function calculateScore(diff: number, type: string, rankDiff?: number): number {
   const base = type === '保底' ? 86 : type === '稳妥' ? 76 : 58;
+  if (rankDiff !== undefined) {
+    const rankAdjust = type === '冲刺'
+      ? Math.max(-12, Math.min(8, rankDiff / 80))
+      : type === '稳妥'
+        ? Math.max(-6, Math.min(14, (300 - Math.abs(rankDiff)) / 30))
+        : Math.max(-4, Math.min(10, rankDiff / 300));
+    return Math.max(1, Math.min(100, Math.round(base + rankAdjust)));
+  }
   return Math.max(1, Math.min(100, Math.round(base + Math.max(-18, Math.min(12, diff)))));
 }
 
-function calculateChance(diff: number, type: string): number {
+function calculateChance(diff: number, type: string, rankDiff?: number): number {
   const base = type === '保底' ? 82 : type === '稳妥' ? 62 : 34;
+  if (rankDiff !== undefined) {
+    const rankAdjust = type === '冲刺'
+      ? Math.max(-18, Math.min(8, rankDiff / 35))
+      : type === '稳妥'
+        ? Math.max(-6, Math.min(18, (300 - Math.abs(rankDiff)) / 18))
+        : Math.max(0, Math.min(13, rankDiff / 180));
+    return Math.max(5, Math.min(95, Math.round(base + rankAdjust)));
+  }
   return Math.max(5, Math.min(95, Math.round(base + Math.max(-20, Math.min(16, diff * 1.4)))));
 }
 
