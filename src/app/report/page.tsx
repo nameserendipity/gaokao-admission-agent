@@ -258,7 +258,7 @@ function RecommendationSection({ title, description, tone, items, userScore, ran
 function RecommendationCard({ rec, userScore, rankEstimated }: { rec: Recommendation; userScore: number; rankEstimated: boolean }) {
   const isArtSports = rec.admissionRecord.id.startsWith('art-sports-');
   const isSportsRecommendation = isArtSports && rec.admissionRecord.majorCategory.includes('\u4f53\u80b2');
-  const artSportsScoreLabel = isSportsRecommendation ? '\u4f53\u80b2\u7efc\u5408\u5206/\u6295\u6863\u5206' : '\u6295\u6863\u7efc\u5408\u5206';
+  const artSportsScoreLabel = isSportsRecommendation ? '\u4f53\u80b2\u4e13\u4e1a\u6295\u6863\u5206/\u4e13\u4e1a\u5206' : '\u6295\u6863\u7efc\u5408\u5206';
   const artSportsRankLabel = isSportsRecommendation ? '\u4f53\u80b2\u6295\u6863\u6392\u540d' : '\u6295\u6863\u6392\u540d';
   const rawGroupInfo = extractRawGroupInfo(rec.admissionRecord.notes);
   const visibleNotes = stripRawGroupInfo(rec.admissionRecord.notes);
@@ -302,7 +302,7 @@ function RecommendationCard({ rec, userScore, rankEstimated }: { rec: Recommenda
         <div>
           <p className="mb-2 text-xs font-medium text-slate-500">{'\u6570\u636e\u8bc1\u636e'}</p>
           <div className="space-y-1.5">
-            {(rec.evidence || []).slice(0, 2).map(item => <p key={`${item.year}-${item.lowestRank}`} className="text-xs leading-5 text-slate-500">{item.year}{'\u5e74 \u00b7 '}{isSportsRecommendation ? `\u4f53\u80b2\u7efc\u5408\u5206/\u6295\u6863\u5206 ${item.lowestScore}` : `${item.lowestScore}\u5206`}{' \u00b7 '}{isSportsRecommendation ? `\u4f53\u80b2\u6295\u6863\u6392\u540d ${item.lowestRank || '-'}` : `${item.lowestRank || '-'}\u4f4d`}{' \u00b7 '}{item.sourceName}</p>)}
+            {(rec.evidence || []).slice(0, 2).map(item => <p key={`${item.year}-${item.lowestRank}`} className="text-xs leading-5 text-slate-500">{item.year}{'\u5e74 \u00b7 '}{isSportsRecommendation ? `\u4f53\u80b2\u4e13\u4e1a\u6295\u6863\u5206/\u4e13\u4e1a\u5206 ${item.lowestScore}` : `${item.lowestScore}\u5206`}{' \u00b7 '}{isSportsRecommendation ? `\u4f53\u80b2\u6295\u6863\u6392\u540d ${item.lowestRank || '-'}` : `${item.lowestRank || '-'}\u4f4d`}{' \u00b7 '}{item.sourceName}</p>)}
             {rawGroupInfo && <p className="text-xs leading-5 text-slate-500">{'\u539f\u59cb\u4e13\u4e1a\u7ec4\uff1a'}{rawGroupInfo}</p>}
           </div>
         </div>
