@@ -48,6 +48,7 @@ export function validateUserProfile(input: unknown): UserProfile {
   if (candidateType !== 'general' && raw.province !== 'jiangxi') throw new Error('当前艺体报告仅支持江西省。');
   if (candidateType === 'art' && (typeof raw.compositeScore !== 'number' || raw.compositeScore <= 0)) throw new Error('请填写艺术类综合分/投档分。');
   if (candidateType === 'sports' && (typeof raw.professionalScore !== 'number' || raw.professionalScore <= 0)) throw new Error('请填写体育专业分。');
+  if (candidateType === 'sports' && (typeof raw.compositeScore !== 'number' || raw.compositeScore <= 0)) throw new Error('请填写体育综合分/投档分。');
   if (candidateType === 'art' && !isNonEmptyString(raw.artSportsCategory)) throw new Error('请选择艺术类专业类别。');
   const normalizedSubjectCategory = candidateType === 'general'
     ? normalizeSubjectCategory(raw.subjectCategory) || getSubjectCategoryFromSelection(raw.primarySubject, raw.electiveSubjects)
