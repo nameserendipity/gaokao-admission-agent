@@ -1,10 +1,10 @@
 import type { Report } from '@/lib/types';
-import { searchAdmissionKnowledge, evidenceToAdmissionRecord, lookupAdmissionTrend } from '@/lib/knowledge/admission-sqlite';
+import { searchAdmissionKnowledge, evidenceToAdmissionRecord, lookupAdmissionTrend, searchArtSportsAdmissions } from '@/lib/knowledge/admission-sqlite';
 import { searchAdmissionWithTavily, searchWebWithTavily } from '@/lib/knowledge/tavily-search';
 import { searchTeacherKnowledge } from '@/lib/knowledge/teacher-knowledge';
 
 export interface AgentToolEvidence {
-  tool: 'report' | 'local_admission_db' | 'admission_trend_lookup' | 'teacher_knowledge' | 'tavily_search';
+  tool: 'report' | 'local_admission_db' | 'art_sports_admission_db' | 'admission_trend_lookup' | 'teacher_knowledge' | 'tavily_search';
   title: string;
   summary: string;
   data: unknown;
@@ -24,6 +24,46 @@ export async function collectAgentEvidence(report: Report, question: string): Pr
 
   evidences.push({ tool: 'report', title: '\u5f53\u524d\u62a5\u544a\u8bc1\u636e', summary: reportMatches.length > 0 ? '\u5df2\u4ece\u5f53\u524d\u62a5\u544a\u4e2d\u627e\u5230\u76f8\u5173\u63a8\u8350\u3002' : '\u5f53\u524d\u62a5\u544a\u4e2d\u6ca1\u6709\u76f4\u63a5\u547d\u4e2d\u7684\u9662\u6821\u6216\u4e13\u4e1a\u3002', data: reportMatches });
   usedTools.add('report');
+
+  if (report.userProfile.candidateType === 'art' || report.userProfile.candidateType === 'sports') {
+    try {
+      const score = report.userProfile.compositeScore || report.positionAnalysis.score;
+      const arts = await searchArtSportsAdmissions({
+        candidateType: report.userProfile.candidateType,
+        category: report.userProfile.candidateType === 'sports' ? '体育类' : report.userProfile.artSportsCategory || undefined,
+        compositeScore: score,
+        scoreWindow: report.userProfile.candidateType === 'sports' ? 12 : 70,
+        limit: 160,
+      });
+      evidences.push({
+        tool: 'art_sports_admission_db',
+        title: '江西艺体投档数据库补查',
+        summary: `已按${report.userProfile.candidateType === 'sports' ? '体育综合分/投档分' : '艺术综合分/投档分'} ${score} 补查江西${report.userProfile.candidateType === 'sports' ? '体育类' : report.userProfile.artSportsCategory || '艺术类'}本科批投档线，命中 ${arts.records.length} 条。`,
+        data: arts.records.slice(0, 40).map(item => ({
+          candidateType: item.candidateType,
+          category: item.category,
+          university: item.schoolName,
+          groupCode: item.groupCode,
+          groupName: item.groupName,
+          year: item.year,
+          score: item.filingScore,
+          rank: item.filingRank,
+          scoreDiff: Math.round((score - item.filingScore) * 1000) / 1000,
+          source: item.sourceFile,
+        })),
+      });
+      warnings.push(...arts.warnings);
+      usedTools.add('art_sports_admission_db');
+    } catch (error) {
+      warnings.push(`江西艺体投档数据库补查失败：${error instanceof Error ? error.message : '未知错误'}`);
+    }
+
+    const teacher = searchTeacherKnowledge(report.userProfile, [...report.riskWarnings, question]);
+    evidences.push({ tool: 'teacher_knowledge', title: '\u8001\u5e08\u65b9\u6cd5\u8bba\u77e5\u8bc6\u5e93', summary: teacher.items.length > 0 ? `\u547d\u4e2d ${teacher.items.length} \u6761\u65b9\u6cd5\u8bba\u3002` : '\u672a\u547d\u4e2d\u65b9\u6cd5\u8bba\u77e5\u8bc6\u3002', data: teacher.items.slice(0, 5).map(item => ({ title: item.title, category: item.category, tags: item.tags, content: item.content.slice(0, 800) })) });
+    warnings.push(...teacher.warnings, '艺体追问已使用艺体投档表，不套用普通类文化分位次模型。');
+    usedTools.add('teacher_knowledge');
+    return { evidences, warnings, usedTools: [...usedTools] };
+  }
 
   if (shouldUseTrendLookup(question)) {
     try {

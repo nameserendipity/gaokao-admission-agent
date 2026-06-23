@@ -171,6 +171,8 @@ export async function searchArtSportsAdmissions(input: {
   candidateType: 'art' | 'sports';
   category?: string;
   compositeScore: number;
+  scoreWindow?: number;
+  direction?: 'around' | 'below' | 'above';
   limit?: number;
 }): Promise<{ records: ArtSportsAdmission[]; warnings: string[] }> {
   const db = await getArtSportsDatabase();
@@ -179,6 +181,8 @@ export async function searchArtSportsAdmissions(input: {
 
   const limit = Math.max(20, Math.min(input.limit ?? 120, 300));
   const score = input.compositeScore;
+  const scoreWindow = Math.max(1, Math.min(input.scoreWindow ?? 35, 220));
+  const direction = input.direction ?? 'around';
   const params: (string | number)[] = [input.candidateType];
   let where = "province = '江西' and candidate_type = ?";
   if (input.category && input.candidateType === 'art') {
@@ -186,14 +190,31 @@ export async function searchArtSportsAdmissions(input: {
     params.push(input.category);
   }
   const warnings: string[] = [];
+  const windowCondition = direction === 'below'
+    ? 'filing_score <= ? and filing_score >= ?'
+    : direction === 'above'
+      ? 'filing_score >= ? and filing_score <= ?'
+      : 'filing_score between ? and ?';
+  const windowParams = direction === 'below'
+    ? [score, score - scoreWindow]
+    : direction === 'above'
+      ? [score, score + scoreWindow]
+      : [score - scoreWindow, score + scoreWindow];
+  const orderBy = direction === 'below'
+    ? 'filing_score desc, year desc'
+    : direction === 'above'
+      ? 'filing_score asc, year desc'
+      : 'year desc, abs(filing_score - ?) asc, filing_score desc';
+  const orderParams = direction === 'around' ? [score] : [];
+
   let rows = selectRows<ArtSportsAdmissionRow>(
     db,
     `select id, province, year, batch, candidate_type, category, school_code, school_name, group_code, group_name, filing_score, filing_rank, source_file
      from art_sports_admission
-     where ${where} and filing_score between ? and ?
-     order by year desc, abs(filing_score - ?) asc, filing_score desc
+     where ${where} and ${windowCondition}
+     order by ${orderBy}
      limit ${limit}`,
-    [...params, score - 35, score + 35, score],
+    [...params, ...windowParams, ...orderParams],
   );
   if (rows.length < 20) {
     warnings.push('按当前综合分窗口命中较少，已扩大艺体投档线检索范围。');

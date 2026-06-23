@@ -16,26 +16,26 @@ const REC = {
 
 type ArtSportsRecommendationType = (typeof REC)[keyof typeof REC];
 
+const SPORTS_PROFESSIONAL_MIN_SCORE = Number(process.env.JIANGXI_SPORTS_PROFESSIONAL_MIN_SCORE || 0);
+
 export async function generateArtSportsReport(userProfile: UserProfile): Promise<Report> {
   if (userProfile.province !== 'jiangxi') throw new Error('当前艺体预览仅支持江西省。');
   if (userProfile.candidateType !== 'art' && userProfile.candidateType !== 'sports') {
     throw new Error('艺体报告需要选择艺术类或体育类考生。');
   }
 
-  // 当前江西体育公开投档表中的 filing_score 是 100 分左右的体育专业投档分口径，
-  // 不能拿 500+ 的体育综合分/投档分去和它硬比。体育综合分仍保留用于用户自查与后续扩展。
-  const scoreForMatch = userProfile.candidateType === 'sports'
-    ? userProfile.professionalScore
-    : userProfile.compositeScore ?? userProfile.score;
+  const scoreForMatch = userProfile.compositeScore ?? userProfile.score;
   if (!scoreForMatch || scoreForMatch <= 0) {
-    throw new Error(userProfile.candidateType === 'sports' ? '请填写体育专业分。' : '请填写艺体综合分/投档分。');
+    throw new Error(userProfile.candidateType === 'sports' ? '请填写体育综合分/投档分。' : '请填写艺体综合分/投档分。');
   }
+  if (userProfile.candidateType === 'sports' && (!userProfile.professionalScore || userProfile.professionalScore <= 0)) throw new Error('请填写体育专业分。');
 
   const result = await searchArtSportsAdmissions({
     candidateType: userProfile.candidateType,
     category: userProfile.candidateType === 'sports' ? '体育类' : userProfile.artSportsCategory || undefined,
     compositeScore: scoreForMatch,
-    limit: 160,
+    scoreWindow: userProfile.candidateType === 'sports' ? 12 : 60,
+    limit: 220,
   });
   if (result.records.length === 0) throw new Error('未查询到匹配的江西艺体投档数据。');
 
@@ -44,11 +44,11 @@ export async function generateArtSportsReport(userProfile: UserProfile): Promise
   const category = userProfile.candidateType === 'sports' ? '体育类' : userProfile.artSportsCategory || '艺术类';
   const scoreLabel = getArtSportsScoreLabel(userProfile.candidateType);
   const rankLabel = userProfile.candidateType === 'sports' ? '体育投档排名' : '艺体综合分排名/投档排名';
-  const diffBasis = userProfile.candidateType === 'sports' ? '体育专业投档分/专业分差值' : '综合分差值';
+  const diffBasis = userProfile.candidateType === 'sports' ? '体育综合分/投档分差值' : '综合分差值';
   const rankText = userProfile.rank ? `；你填写的${rankLabel}约第 ${userProfile.rank} 名` : `；未填写${rankLabel}，将主要按${diffBasis}匹配`;
-  const sportsCompositeNote = userProfile.candidateType === 'sports' && userProfile.compositeScore
-    ? `；你填写的体育综合分/投档分为 ${userProfile.compositeScore} 分，当前仅作辅助复核`
-    : '';
+  const sportsCompositeNote = userProfile.candidateType === 'sports' ? `；体育专业分 ${userProfile.professionalScore} 分用于全局门槛风险提示` : '';
+  const sportsGateDiagnosis = buildSportsGateDiagnosis(userProfile);
+  const sportsGateWarnings = buildSportsGateWarnings(userProfile);
 
   return {
     id: `report-art-sports-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -68,7 +68,7 @@ export async function generateArtSportsReport(userProfile: UserProfile): Promise
         majors: [category],
         reasons: [
           userProfile.candidateType === 'sports'
-            ? '体育类录取以对应类别、院校专业组和体育专业投档分/专业分为核心参考；体育综合分/投档分用于辅助复核。'
+            ? '体育类先核验专业分是否达到全局门槛，再以体育综合分/投档分、院校专业组和投档排名作为核心参考。'
             : '艺术类录取以对应类别、院校专业组和综合分/投档分为核心参考。',
           '本报告不套用普通类位次模型，单独按江西艺体本科批投档数据匹配。',
         ],
@@ -80,28 +80,30 @@ export async function generateArtSportsReport(userProfile: UserProfile): Promise
         title: '艺体类单独成组判断',
         category: '艺体规则',
         summary: userProfile.candidateType === 'sports'
-          ? '体育类投档口径与普通类不同。当前江西公开投档表按体育专业投档分口径匹配；仍需核对体育综合分/投档分、文化成绩要求、招生计划和院校专业组。'
+          ? '体育类投档口径与普通类不同。当前先用体育专业分做全局门槛风险提示，再按体育综合分/投档分匹配；仍需核对文化成绩要求、招生计划和院校专业组。'
           : '艺术类投档口径与普通类不同，应重点核对专业类别、综合分、专业成绩要求、招生计划和院校专业组。',
         source: '江西省教育考试院艺体本科批投档线',
       },
     ],
     riskDiagnosis: [
+      ...(sportsGateDiagnosis || []),
       {
         type: 'data',
         level: 'medium',
         message: '艺体预览为最小闭环版本',
         suggestion: userProfile.candidateType === 'sports'
-          ? '当前按体育专业投档分/专业分和体育投档排名匹配。正式填报前还需核验当年招生章程、体育综合分/投档分、文化成绩要求、单科限制、组内具体专业、招生人数、学费、校区和院校专业组录取规则。'
+          ? '当前按体育综合分/投档分和体育投档排名匹配，体育专业分只做全局门槛风险提示。正式填报前还需核验当年招生章程、文化成绩要求、单科限制、组内具体专业、招生人数、学费、校区和院校专业组录取规则。'
           : '当前按综合分/投档分差值匹配。正式填报前还需核验当年招生章程、专业成绩合格线、单科限制、组内具体专业、招生人数、学费、校区和院校专业组录取规则。',
       },
     ],
     riskWarnings: [
       ...result.warnings,
+      ...sportsGateWarnings,
       userProfile.candidateType === 'sports'
-        ? '体育类不按普通类位次模型判断。当前江西体育投档数据按体育专业投档分口径入库，报告优先按体育专业分和投档排名匹配；体育综合分/投档分用于辅助复核。'
+        ? '体育类不按普通类位次模型判断。报告优先按体育综合分/投档分和投档排名匹配；体育专业分用于全局门槛风险提示。'
         : '艺术类不按普通类位次模型判断，综合分公式和专业合格要求以江西省当年政策为准。',
       userProfile.candidateType === 'sports'
-        ? '如果你手里的官方表明确使用体育综合分/投档分排序，请以后续官方一分一段和院校投档表为准，并补充体育投档排名复核。'
+        ? '若体育专业分未达到江西当年专业合格线或高校要求，即使综合分接近也存在资格风险。'
         : '若你填写的是文化分而非综合分/投档分，请先换算后重新生成。',
     ],
     dataSources: collectArtSportsSources(result.records),
@@ -171,9 +173,9 @@ function toRecommendation(record: ArtSportsCandidate, userProfile: UserProfile, 
       `你的${scoreLabel} ${scoreForMatch}，${scoreDiff >= 0 ? '高于' : '低于'}该专业组${record.year}年投档线约 ${Math.abs(scoreDiff).toFixed(3)} 分。`,
       `匹配类别：${record.category}；院校专业组：${record.groupCode}${record.groupName ? ` ${record.groupName}` : ''}。`,
       userProfile.candidateType === 'sports'
-        ? '当前按江西体育类公开投档表中的体育专业投档分和体育投档排名匹配；体育综合分/投档分仅作辅助复核。'
+        ? `当前按体育综合分/投档分和体育投档排名匹配；体育专业分 ${userProfile.professionalScore ?? '-'} 仅作全局门槛风险提示。`
         : '当前按艺术类综合分/投档分口径匹配。',
-      record.filingRank ? `该专业组${record.year}年投档最低排名为 ${record.filingRank}。` : `该条数据未提供投档最低排名，优先按${userProfile.candidateType === 'sports' ? '体育专业投档分' : '综合分'}差值参考。`,
+      record.filingRank ? `该专业组${record.year}年投档最低排名为 ${record.filingRank}。` : `该条数据未提供投档最低排名，优先按${userProfile.candidateType === 'sports' ? '体育综合分/投档分' : '综合分'}差值参考。`,
       userProfile.rank && record.filingRank ? `你的${userProfile.candidateType === 'sports' ? '体育投档排名' : '艺体排名'}与该专业组投档最低排名相差约 ${Math.abs(record.filingRank - userProfile.rank)} 名。` : `若补充${userProfile.candidateType === 'sports' ? '体育投档排名' : '艺体综合分排名/投档排名'}，风险判断会更精细。`,
     ],
     evidence: [{
@@ -191,7 +193,7 @@ function toRecommendation(record: ArtSportsCandidate, userProfile: UserProfile, 
 }
 
 function getArtSportsScoreLabel(candidateType: UserProfile['candidateType']): string {
-  return candidateType === 'sports' ? '体育专业投档分/专业分' : '综合分/投档分';
+  return candidateType === 'sports' ? '体育综合分/投档分' : '综合分/投档分';
 }
 
 function classifyArtSportsRecommendation(userProfile: UserProfile, record: ArtSportsCandidate, scoreDiff: number): ArtSportsRecommendationType {
@@ -201,12 +203,17 @@ function classifyArtSportsRecommendation(userProfile: UserProfile, record: ArtSp
     if (rankDiff <= 300) return REC.stable;
     return REC.guarantee;
   }
-  return classifyByScoreDiff(scoreDiff);
+  return classifyByScoreDiff(scoreDiff, userProfile.candidateType === 'sports' ? 'sports' : 'art');
 }
 
-function classifyByScoreDiff(diff: number): ArtSportsRecommendationType {
+function classifyByScoreDiff(diff: number, candidateType: 'art' | 'sports'): ArtSportsRecommendationType {
+  if (candidateType === 'sports') {
+    if (diff < 0) return REC.sprint;
+    if (diff <= 2) return REC.stable;
+    return REC.guarantee;
+  }
   if (diff < 0) return REC.sprint;
-  if (diff <= 18) return REC.stable;
+  if (diff <= 14) return REC.stable;
   return REC.guarantee;
 }
 
@@ -243,6 +250,33 @@ function collectArtSportsSources(records: ArtSportsCandidate[]): Report['dataSou
     if (!map.has(key)) map.set(key, { name: record.sourceFile || '江西省教育考试院艺体本科批投档线', year: record.year, collectedAt: new Date().toISOString() });
   }
   return [...map.values()].sort((a, b) => b.year - a.year).slice(0, 8);
+}
+
+function buildSportsGateDiagnosis(userProfile: UserProfile): Report['riskDiagnosis'] {
+  if (userProfile.candidateType !== 'sports') return [];
+  if (!SPORTS_PROFESSIONAL_MIN_SCORE) {
+    return [{
+      type: 'data',
+      level: 'medium',
+      message: '体育专业分门槛需人工核验',
+      suggestion: '当前未配置江西体育专业分全局门槛，系统只按你填写的体育综合分/投档分匹配院校专业组；正式填报前需核验当年体育专业合格线、文化控制线和高校要求。',
+    }];
+  }
+  const pass = (userProfile.professionalScore || 0) >= SPORTS_PROFESSIONAL_MIN_SCORE;
+  return [{
+    type: 'data',
+    level: pass ? 'low' : 'high',
+    message: pass ? '体育专业分已达到配置门槛' : '体育专业分低于配置门槛',
+    suggestion: pass
+      ? `已按配置门槛 ${SPORTS_PROFESSIONAL_MIN_SCORE} 分做初步校验，后续仍需以江西省当年正式政策和高校要求为准。`
+      : `你填写的体育专业分 ${userProfile.professionalScore ?? '-'} 低于当前配置门槛 ${SPORTS_PROFESSIONAL_MIN_SCORE}，即使综合分接近也存在资格风险。`,
+  }];
+}
+
+function buildSportsGateWarnings(userProfile: UserProfile): string[] {
+  if (userProfile.candidateType !== 'sports') return [];
+  if (!SPORTS_PROFESSIONAL_MIN_SCORE) return ['体育专业分全局门槛未配置，本报告未对专业合格线做硬性过滤。'];
+  return [`体育专业分全局门槛按当前配置 ${SPORTS_PROFESSIONAL_MIN_SCORE} 分提示风险，最终以江西省当年政策为准。`];
 }
 
 function stableCode(value: string): string {

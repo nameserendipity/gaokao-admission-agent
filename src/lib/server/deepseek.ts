@@ -140,12 +140,15 @@ function buildRuleBasedSummary(report: Report): string {
 function buildToolBackedRuleAnswer(report: Report, toolResult: AgentToolResult): string {
   const reportEvidence = toolResult.evidences.find(item => item.tool === 'report');
   const localEvidence = toolResult.evidences.find(item => item.tool === 'local_admission_db');
+  const artSportsEvidence = toolResult.evidences.find(item => item.tool === 'art_sports_admission_db');
   const webEvidence = toolResult.evidences.find(item => item.tool === 'tavily_search');
   const lines = ['\u6211\u6839\u636e\u5f53\u524d\u62a5\u544a\u548c\u53ef\u7528\u5f55\u53d6\u6570\u636e\u6838\u5bf9\u5982\u4e0b\u3002'];
   const reportItems = Array.isArray(reportEvidence?.data) ? reportEvidence.data.slice(0, 3) as EvidenceLine[] : [];
   if (reportItems.length > 0) { lines.push('\u5f53\u524d\u62a5\u544a\u4e2d\u6700\u76f8\u5173\u7684\u8bc1\u636e\uff1a'); reportItems.forEach(item => lines.push(formatEvidenceLine(item))); }
   const localItems = Array.isArray(localEvidence?.data) ? localEvidence.data.slice(0, 5) as EvidenceLine[] : [];
   if (localItems.length > 0) { lines.push('\u8865\u5145\u6838\u5bf9\u5230\u7684\u5019\u9009\uff1a'); localItems.forEach(item => lines.push(formatEvidenceLine(item))); }
+  const artSportsItems = Array.isArray(artSportsEvidence?.data) ? artSportsEvidence.data.slice(0, 5) as EvidenceLine[] : [];
+  if (artSportsItems.length > 0) { lines.push('江西艺体投档数据库补查到的候选：'); artSportsItems.forEach(item => lines.push(formatEvidenceLine(item))); }
   if (webEvidence) lines.push(webEvidence.summary);
   if (toolResult.warnings.length > 0) lines.push(`\u6ce8\u610f\uff1a${[...new Set(toolResult.warnings)].slice(0, 3).join('\uFF1B')}`);
   lines.push(report.disclaimer);
