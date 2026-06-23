@@ -19,7 +19,7 @@ const reportHighlights = [
   },
   {
     title: '每条推荐都有证据',
-    desc: '展示年份、最低分/位次、来源文件，不用只听一句“AI觉得合适”。',
+    desc: '展示年份、最低分/位次、来源文件，不用只听一句“系统判断合适”。',
   },
   {
     title: '后续可继续追问',
@@ -91,7 +91,7 @@ export default function UnlockPage() {
               </Link>
             </div>
             <p className="mt-3 text-xs text-slate-500">
-              当前测试期免费开放，先完整体验报告效果。
+              当前测试期免费开放，先完整查看报告效果。
             </p>
           </div>
 
@@ -200,7 +200,7 @@ export default function UnlockPage() {
                     <p className="text-sm text-slate-500">测试期权益</p>
                     <p className="mt-1 text-2xl font-bold">免费开放完整报告</p>
                     <p className="mt-2 text-sm leading-6 text-slate-600">
-                      先体验完整冲稳保、避坑诊断和数据证据，确认产品效果。
+                      先查看完整冲稳保、避坑诊断和数据证据，确认产品效果。
                     </p>
                   </div>
                   <Badge className="shrink-0 rounded-full bg-emerald-50 text-emerald-700 hover:bg-emerald-50">当前免费</Badge>

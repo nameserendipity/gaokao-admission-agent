@@ -69,7 +69,7 @@ export async function generateArtSportsReport(userProfile: UserProfile): Promise
         reasons: [
           userProfile.candidateType === 'sports'
             ? '体育类录取以对应类别、院校专业组和体育专业投档分/专业分为核心参考；体育综合分/投档分用于辅助复核。'
-            : '艺术类录取以对应类别、专业组和综合分/投档分为核心参考。',
+            : '艺术类录取以对应类别、院校专业组和综合分/投档分为核心参考。',
           '本报告不套用普通类位次模型，单独按江西艺体本科批投档数据匹配。',
         ],
       },
@@ -91,8 +91,8 @@ export async function generateArtSportsReport(userProfile: UserProfile): Promise
         level: 'medium',
         message: '艺体预览为最小闭环版本',
         suggestion: userProfile.candidateType === 'sports'
-          ? '当前按体育专业投档分/专业分和体育投档排名匹配。正式填报前还需核验当年招生章程、体育综合分/投档分、文化成绩要求、单科限制和专业组要求。'
-          : '当前按综合分/投档分差值匹配。正式填报前还需核验当年招生章程、专业成绩合格线、单科限制和专业组要求。',
+          ? '当前按体育专业投档分/专业分和体育投档排名匹配。正式填报前还需核验当年招生章程、体育综合分/投档分、文化成绩要求、单科限制、组内具体专业、招生人数、学费、校区和院校专业组录取规则。'
+          : '当前按综合分/投档分差值匹配。正式填报前还需核验当年招生章程、专业成绩合格线、单科限制、组内具体专业、招生人数、学费、校区和院校专业组录取规则。',
       },
     ],
     riskWarnings: [
@@ -105,7 +105,7 @@ export async function generateArtSportsReport(userProfile: UserProfile): Promise
         : '若你填写的是文化分而非综合分/投档分，请先换算后重新生成。',
     ],
     dataSources: collectArtSportsSources(result.records),
-    disclaimer: '本报告仅供参考，不构成录取承诺或保证。艺体类最终以江西省教育考试院、高校招生章程及当年正式投档规则为准。',
+    disclaimer: '本报告仅供参考，不构成录取承诺或保证。艺体类当前只推荐院校专业组，不推荐具体专业；组内具体专业、招生人数、学费、校区、录取规则最终以江西省教育考试院、高校招生章程及当年正式投档规则为准。',
   };
 }
 
@@ -145,7 +145,7 @@ function toRecommendation(record: ArtSportsCandidate, userProfile: UserProfile, 
     universityLevel: 'ordinary',
     province: 'jiangxi',
     year: record.year,
-    majorName: `${record.category}专业组`,
+    majorName: `${record.category}院校专业组`,
     majorCategory: record.category,
     subjectRequirement: [userProfile.subjectCategory],
     admissionType: 'parallel',
@@ -156,11 +156,11 @@ function toRecommendation(record: ArtSportsCandidate, userProfile: UserProfile, 
     dataSource: record.sourceFile || '江西省教育考试院艺体本科批投档线',
     collectedAt: new Date().toISOString(),
     batchId: record.batch,
-    notes: `院校专业组：${record.groupCode}${record.groupName ? ` ${record.groupName}` : ''}；组内具体专业需以江西省招生计划和高校招生章程为准`,
+    notes: `院校专业组：${record.groupCode}${record.groupName ? ` ${record.groupName}` : ''}；组内具体专业、招生人数、学费、校区、录取规则需以江西省招生计划和高校招生章程为准`,
   };
   return {
     university,
-    major: { code: record.groupCode, name: `${record.category}专业组`, category: record.category },
+    major: { code: record.groupCode, name: `${record.category}院校专业组`, category: record.category },
     admissionRecord,
     recommendationType,
     matchScore: calculateScore(scoreDiff, recommendationType, rankDiff),
@@ -185,8 +185,8 @@ function toRecommendation(record: ArtSportsCandidate, userProfile: UserProfile, 
     }],
     riskLevel: recommendationType === REC.sprint ? 'high' : recommendationType === REC.stable ? 'medium' : 'low',
     riskNotes: userProfile.candidateType === 'sports'
-      ? '当前投档线只到院校专业组层级；组内具体专业、计划数、学费、文化成绩要求、体育综合分/投档分口径和录取规则需复核江西省招生计划、高校招生章程。'
-      : '当前投档线只到院校专业组层级；组内具体专业、计划数、学费和录取规则需复核江西省招生计划、高校招生章程和当年综合分公式。',
+      ? '当前投档线只到院校专业组层级；这不是具体专业推荐。组内具体专业、招生人数、学费、校区、文化成绩要求、体育综合分/投档分口径和录取规则需复核江西省招生计划、高校招生章程。'
+      : '当前投档线只到院校专业组层级；这不是具体专业推荐。组内具体专业、招生人数、学费、校区和录取规则需复核江西省招生计划、高校招生章程和当年综合分公式。',
   };
 }
 
