@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Analytics } from '@vercel/analytics/next';
+import { SpeedInsights } from '@vercel/speed-insights/next';
 import { Inspector } from 'react-dev-inspector';
 import './globals.css';
 
@@ -74,6 +75,7 @@ export default function RootLayout({
         {isDev && <Inspector />}
         {children}
         <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
